@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>치킨 시장 - 수요와 공급</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#fff7ed; --card:#ffffff; --ink:#1f2937; --sub:#6b7280;
+    --brand:#f97316; --brand2:#ea580c; --demand:#2563eb; --supply:#dc2626;
+    --ok:#16a34a; --bad:#dc2626; --line:#f1e3d3; --soft:#fff1e0;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.5;}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px;}
+  .center{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;
+    box-shadow:0 10px 30px rgba(234,88,12,.08);padding:26px;}
+  h1{font-size:26px;margin:0 0 6px;}
+  h2{font-size:20px;margin:0 0 12px;}
+  .muted{color:var(--sub);}
+  .logo{font-size:40px;}
+  .btn{border:none;border-radius:14px;padding:16px 22px;font-size:18px;font-weight:800;
+    cursor:pointer;transition:.12s transform,.12s filter;}
+  .btn:active{transform:translateY(1px)}
+  .btn-brand{background:var(--brand);color:#fff}
+  .btn-brand:hover{filter:brightness(1.05)}
+  .btn-ghost{background:var(--soft);color:var(--brand2)}
+  .btn-dark{background:#111827;color:#fff}
+  .btn-ok{background:var(--ok);color:#fff}
+  .btn-big{width:100%;padding:24px;font-size:22px;border-radius:18px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .grow{flex:1}
+  input,select,textarea{font-size:18px;padding:14px;border:2px solid var(--line);border-radius:12px;width:100%;
+    font-family:inherit;background:#fff}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand)}
+  label{font-weight:700;font-size:14px;color:var(--sub);display:block;margin-bottom:6px}
+  .pin{font-size:60px;font-weight:900;letter-spacing:10px;color:var(--brand2);text-align:center;
+    background:var(--soft);border-radius:16px;padding:16px 8px;margin:8px 0}
+  .pill{display:inline-block;background:var(--soft);color:var(--brand2);border-radius:999px;
+    padding:6px 14px;font-weight:800;font-size:14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .tally{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0}
+  .tbox{border-radius:16px;padding:18px;text-align:center}
+  .tbox .n{font-size:52px;font-weight:900;line-height:1}
+  .tbox .l{font-weight:800;margin-top:6px}
+  .t-yes{background:#e7f6ec;color:var(--ok)}
+  .t-no{background:#fdeaea;color:var(--supply)}
+  .t-wait{background:#f3f4f6;color:var(--sub)}
+  .price-big{font-size:60px;font-weight:900;color:var(--brand2);text-align:center;margin:10px 0}
+  .students{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .chip{background:var(--soft);border-radius:999px;padding:8px 14px;font-weight:700}
+  .stepbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}
+  .stepbar .prog{height:10px;background:var(--line);border-radius:999px;flex:1;overflow:hidden}
+  .stepbar .prog>i{display:block;height:100%;background:var(--brand);transition:.3s width}
+  .nav{display:flex;gap:12px;margin-top:20px}
+  .blank{display:inline-block;min-width:90px;text-align:center;border-bottom:3px solid var(--brand);
+    color:var(--brand2);font-weight:900}
+  .sentence{font-size:24px;line-height:2;background:var(--soft);border-radius:16px;padding:20px;margin:10px 0}
+  .hidden{display:none!important}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+    background:#111827;color:#fff;padding:14px 22px;border-radius:999px;font-weight:800;
+    box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:50}
+  .look{font-size:22px;text-align:center;color:var(--sub);padding:36px 10px}
+  .look .emoji{font-size:60px;display:block;margin-bottom:12px}
+  .cardtag{position:fixed;top:12px;right:12px;font-size:12px;background:#111827;color:#fff;
+    padding:6px 12px;border-radius:999px;z-index:40;opacity:.85}
+  a{color:var(--brand2)}
+  .warn{background:#fff4e5;border:1px solid #ffd8a8;border-radius:12px;padding:14px;color:#9a5b00;font-size:14px}
+  canvas{max-width:100%}
+  .std{background:var(--soft);border-radius:14px;padding:16px 18px;margin:10px 0;font-size:17px;line-height:1.6}
+  .std b{color:var(--brand2)}
+  .gamecard{border-radius:18px;padding:22px;text-align:center;color:#fff;margin:10px 0}
+  .gc-buy{background:linear-gradient(135deg,#2563eb,#1d4ed8)}
+  .gc-sell{background:linear-gradient(135deg,#dc2626,#b91c1c)}
+  .gamecard .role{font-size:20px;font-weight:800;opacity:.95}
+  .gamecard .val{font-size:46px;font-weight:900;margin:8px 0}
+  .gamecard .hint{font-size:15px;opacity:.95}
+  .fb{border-radius:14px;padding:14px;font-weight:800;text-align:center;margin-top:12px;font-size:18px}
+  .fb-ok{background:#e7f6ec;color:var(--ok)}
+  .fb-bad{background:#fdeaea;color:var(--bad)}
+  .hist{display:flex;align-items:flex-end;gap:10px;height:220px;margin:16px 0;padding:0 6px}
+  .hist .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px}
+  .hist .col .bar{width:100%;border-radius:8px 8px 0 0;background:var(--brand);transition:.3s height;min-height:2px}
+  .hist .col.peak .bar{background:var(--ok)}
+  .hist .col .cnt{font-weight:800}
+  .hist .col .px{font-size:12px;color:var(--sub);transform:rotate(-30deg);white-space:nowrap}
+  .resp-list{max-height:340px;overflow:auto;margin-top:10px}
+  .resp{background:var(--soft);border-radius:12px;padding:10px 14px;margin:6px 0}
+  .resp b{color:var(--brand2)}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}.price-big{font-size:48px}.pin{font-size:44px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="tag" class="cardtag hidden"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+/* =========================================================================
+   치킨 시장 — 수요와 공급 실시간 수업 웹앱 (1~11단계 · 모의 시장 포함)
+   [ Firebase ]  아래 FIREBASE_CONFIG 를 선생님 프로젝트 값으로.
+   [ Google Sheets ] SHEET_URL 에 Apps Script 웹앱 URL 을 넣으면 응답 내보내기 가능.
+   ========================================================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyChEuuawdgNznSb8FzByP98GhTEzq_hAdo",
+  authDomain: "demandsupply-b961c.firebaseapp.com",
+  databaseURL: "https://demandsupply-b961c-default-rtdb.firebaseio.com",
+  projectId: "demandsupply-b961c",
+  storageBucket: "demandsupply-b961c.firebasestorage.app",
+  messagingSenderId: "475624406832",
+  appId: "1:475624406832:web:cef84e906a88aa574d12f5",
+  measurementId: "G-5LCN6XJVX6"
+};
+const SHEET_URL = ""; // Google Apps Script 웹앱 URL (설정에서도 입력 가능)
+
+const PRICES = [5000, 15000, 30000, 50000, 70000];   // 수요·공급 그래프용 가격
+const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
+
+/* --- 모의 시장(치킨) 카드 값 : 교과서 튤립 게임 구조를 치킨으로 각색 ---
+   구매자(수요자)의 '만족가'는 모두 9,000원 이상, 판매자(공급자)의 '원가'는
+   모두 8,000원 이하 → 어떤 짝이든 이익이 나므로 모두가 거래할 수 있고,
+   거래가는 8,000~9,000원 부근(균형)에 몰린다. */
+const BUYER_POOL  = [9000, 10000, 11000, 12000, 13000];  // 치킨의 '만족 가치'
+const SELLER_POOL = [4000, 5000, 6000, 7000, 8000];      // 치킨 '생산 원가'
+const MKT_UNIT = 1000;
+
+/* 화면 시퀀스 */
+const SCREENS = [
+  {t:'lobby'},
+  {t:'standards'},
+  {t:'demand_intro'},
+  ...PRICES.map(p=>({t:'demand_price', price:p})),
+  {t:'demand_curve'},
+  {t:'demand_written'},
+  {t:'supply_intro'},
+  ...PRICES.map(p=>({t:'supply_price', price:p})),
+  {t:'supply_curve'},
+  {t:'supply_written'},
+  {t:'both_curve'},
+  {t:'price_who'},        // 5. 가격은 누가 결정할까 (자유 응답)
+  {t:'market_intro'},     // 6. 모의 시장 준비(카드 배부)
+  {t:'market_trade'},     // 6. 거래
+  {t:'market_result'},    // 6. 전체 거래 결과표
+  {t:'eq_written'},       // 7. 균형가격·균형거래량 (서술형)
+  {t:'explain'},          // 10. 설명하기
+  {t:'summarize'},        // 11. 자기 말로 정리
+  {t:'end'}
+];
+
+/* ------------------------------ 상태 ------------------------------ */
+let db=null, role=null, pin=null, sid=null, sname=null;
+let roomRef=null, liveData={}, chart=null;
+
+/* 학생 고유 id — 탭(창)마다 다르게 (sessionStorage는 탭별 분리) */
+sid = sessionStorage.getItem('cm_sid');
+if(!sid){ sid='u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); sessionStorage.setItem('cm_sid', sid); }
+
+const $ = s => document.querySelector(s);
+const app = $('#app');
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.remove('hidden');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.add('hidden'),1600); }
+function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function nameOf(id){ if(id==='BOT') return '🤖 도우미'; return ((liveData.students||{})[id]||{}).name || '학생'; }
+
+/* ---------------------- Firebase ---------------------- */
+function getConfig(){ const s=localStorage.getItem('cm_fbconfig'); if(s){try{return JSON.parse(s);}catch(e){}} return FIREBASE_CONFIG; }
+function getSheetUrl(){ return localStorage.getItem('cm_sheeturl') || SHEET_URL; }
+function isConfigured(cfg){ return cfg && cfg.databaseURL && !cfg.databaseURL.includes('PASTE_YOUR'); }
+function initFirebase(){ const cfg=getConfig(); if(!isConfigured(cfg)) return false;
+  if(!firebase.apps.length) firebase.initializeApp(cfg); db=firebase.database(); return true; }
+
+/* 공통 구독 (교사·학생 동일) */
+function subscribeAll(){
+  roomRef.child('screenIndex').on('value', s=>{ liveData.screenIndex=s.val()||0; renderCurrent(); });
+  roomRef.child('students').on('value', s=>{ liveData.students=s.val()||{}; renderCurrent(); });
+  roomRef.child('responses').on('value', s=>{ liveData.responses=s.val()||{}; renderCurrent(); });
+  roomRef.child('market').on('value', s=>{ liveData.market=s.val()||{}; renderCurrent(); });
+  roomRef.child('text').on('value', s=>{ liveData.text=s.val()||{}; renderCurrent(); });
+}
+
+/* =======================================================================
+   랜딩 / 설정
+   ======================================================================= */
+function renderLanding(){
+  const configured = isConfigured(getConfig());
+  app.innerHTML = `
+  <div class="center wrap">
+    <div class="card" style="max-width:460px;width:100%;text-align:center">
+      <div class="logo">🍗</div>
+      <h1>치킨 시장</h1>
+      <p class="muted">수요와 공급의 원리를 직접 만들어 봐요</p>
+      ${configured?'':`<div class="warn" style="text-align:left;margin:14px 0">⚠ Firebase 설정이 필요해요. <b>설정</b>에서 넣어주세요.</div>`}
+      <div style="height:10px"></div>
+      <button class="btn btn-brand btn-big" onclick="chooseRole('teacher')">👩‍🏫 선생님으로 시작</button>
+      <div style="height:12px"></div>
+      <button class="btn btn-ghost btn-big" onclick="chooseRole('student')">🙋 학생으로 참여</button>
+      <div style="height:16px"></div>
+      <button class="btn btn-ghost" style="font-size:14px;padding:10px 16px" onclick="renderConfig()">⚙️ 설정 (Firebase · 구글시트)</button>
+    </div>
+  </div>`;
+}
+function renderConfig(){
+  const cur=getConfig();
+  app.innerHTML = `
+  <div class="center wrap">
+    <div class="card" style="max-width:560px;width:100%">
+      <h2>⚙️ 설정</h2>
+      <label>Firebase config (JSON)</label>
+      <textarea id="cfgin" style="height:150px;font-family:monospace;font-size:13px">${esc(JSON.stringify(isConfigured(cur)?cur:{apiKey:"",databaseURL:""},null,2))}</textarea>
+      <div style="height:12px"></div>
+      <label>Google Sheets Apps Script URL (선택)</label>
+      <input id="sheetin" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(getSheetUrl())}">
+      <div class="nav">
+        <button class="btn btn-brand grow" onclick="saveConfig()">저장</button>
+        <button class="btn btn-ghost" onclick="renderLanding()">뒤로</button>
+      </div>
+    </div>
+  </div>`;
+}
+function saveConfig(){
+  try{ localStorage.setItem('cm_fbconfig', JSON.stringify(JSON.parse($('#cfgin').value.replace(/,\s*}/g,'}')))); }
+  catch(e){ toast('Firebase JSON 형식 확인'); return; }
+  localStorage.setItem('cm_sheeturl', ($('#sheetin').value||'').trim());
+  toast('저장했어요'); renderLanding();
+}
+function chooseRole(r){
+  if(!initFirebase()){ toast('먼저 Firebase 설정이 필요해요'); renderConfig(); return; }
+  role=r; if(r==='teacher') startTeacher(); else renderStudentJoin();
+}
+
+/* =======================================================================
+   교사 / 학생 진입
+   ======================================================================= */
+function startTeacher(){
+  pin=String(Math.floor(1000+Math.random()*9000));
+  roomRef=db.ref('rooms/'+pin);
+  roomRef.child('screenIndex').set(0);
+  roomRef.child('meta').set({createdAt:Date.now()});
+  subscribeAll();
+  $('#tag').textContent='선생님 · 방 '+pin; $('#tag').classList.remove('hidden');
+}
+function teacherGo(delta){
+  const idx=Math.max(0,Math.min(SCREENS.length-1,(liveData.screenIndex||0)+delta));
+  roomRef.child('screenIndex').set(idx);
+}
+function renderStudentJoin(){
+  app.innerHTML=`
+  <div class="center wrap">
+    <div class="card" style="max-width:420px;width:100%;text-align:center">
+      <div class="logo">🙋</div><h1>학생 참여</h1><div style="height:10px"></div>
+      <label style="text-align:left">방 번호 (PIN)</label>
+      <input id="pinin" inputmode="numeric" maxlength="4" placeholder="숫자 4자리" style="text-align:center;font-size:28px;letter-spacing:8px">
+      <div style="height:12px"></div>
+      <label style="text-align:left">이름</label>
+      <input id="namein" placeholder="이름을 입력하세요">
+      <div style="height:16px"></div>
+      <button class="btn btn-brand btn-big" onclick="studentJoin()">입장하기</button>
+      <div style="height:12px"></div>
+      <button class="btn btn-ghost" style="font-size:14px" onclick="renderLanding()">뒤로</button>
+    </div>
+  </div>`;
+}
+function studentJoin(){
+  const p=($('#pinin').value||'').trim(), nm=($('#namein').value||'').trim();
+  if(p.length!==4){ toast('방 번호 4자리'); return; }
+  if(!nm){ toast('이름을 입력하세요'); return; }
+  pin=p; sname=nm; roomRef=db.ref('rooms/'+pin);
+  roomRef.child('meta').get().then(snap=>{
+    if(!snap.exists()){ toast('없는 방 번호예요'); return; }
+    roomRef.child('students/'+sid).set({name:nm, joinedAt:Date.now()});
+    subscribeAll();
+    $('#tag').textContent=nm+' · 방 '+pin; $('#tag').classList.remove('hidden');
+  });
+}
+
+/* =======================================================================
+   학생 응답 쓰기
+   ======================================================================= */
+function studentAnswerPrice(kind, price, val){
+  roomRef.child('responses/'+kind+'/'+price+'/'+sid).set(val);
+  toast(val?'제출!':'제출!');
+}
+function studentWritten(node){
+  const p=$('#w_p').value, q=$('#w_q').value;
+  if(!p||!q){ toast('빈칸을 모두 선택하세요'); return; }
+  roomRef.child('responses/'+node+'/'+sid).set({p,q}); toast('제출 완료!');
+}
+function studentEq(){
+  const a=$('#e_a').value, b=$('#e_b').value;
+  if(!a||!b){ toast('빈칸을 모두 선택하세요'); return; }
+  roomRef.child('responses/eqWritten/'+sid).set({a,b}); toast('제출 완료!');
+}
+function studentText(key){
+  const v=($('#txt').value||'').trim();
+  if(!v){ toast('내용을 입력하세요'); return; }
+  roomRef.child('text/'+key+'/'+sid).set({name:sname, text:v}); toast('제출 완료!');
+}
+function studentOffer(){
+  let v=parseInt(($('#offer').value||'').replace(/[^0-9]/g,''),10);
+  if(!v){ toast('희망 가격을 입력하세요'); return; }
+  v=Math.round(v/MKT_UNIT)*MKT_UNIT;
+  roomRef.child('market/offers/'+sid).set(v); toast('희망 가격 제출: '+won(v));
+}
+
+/* =======================================================================
+   집계 & 왜곡 보정 (그래프는 항상 우하향/우상향 강제)
+   ======================================================================= */
+function respNode(kind){ return (liveData.responses||{})[kind]||{}; }
+function rawCounts(kind){
+  const data=respNode(kind), out={};
+  PRICES.forEach(p=>{ const at=data[p]||{}; let yes=0,no=0;
+    Object.values(at).forEach(v=> v?yes++:no++); out[p]={yes,no}; });
+  return out;
+}
+function correctedDemand(){
+  const data=respNode('demand'), m={};
+  PRICES.forEach(p=>{ const at=data[p]||{};
+    Object.entries(at).forEach(([u,v])=>{ if(v) m[u]=Math.max(m[u]||0,p); }); });
+  return PRICES.map(p=> Object.values(m).filter(w=>w>=p).length);
+}
+function correctedSupply(){
+  const data=respNode('supply'), m={};
+  PRICES.forEach(p=>{ const at=data[p]||{};
+    Object.entries(at).forEach(([u,v])=>{ if(v) m[u]=Math.min(m[u]===undefined?Infinity:m[u],p); }); });
+  return PRICES.map(p=> Object.values(m).filter(w=>w<=p).length);
+}
+function displayDemand(){ const d=correctedDemand().slice();
+  for(let i=d.length-2;i>=0;i--){ if(d[i]<=d[i+1]) d[i]=d[i+1]+1; } return d; }
+function displaySupply(){ const s=correctedSupply().slice();
+  for(let i=1;i<s.length;i++){ if(s[i]<=s[i-1]) s[i]=s[i-1]+1; } return s; }
+function equilibrium(){
+  const d=displayDemand(), s=displaySupply();
+  for(let i=0;i<PRICES.length-1;i++){
+    const g1=d[i]-s[i], g2=d[i+1]-s[i+1];
+    if(g1===0) return {price:PRICES[i], qty:d[i]};
+    if(g1>0&&g2<0){ const t=g1/(g1-g2);
+      return {price:Math.round(PRICES[i]+t*(PRICES[i+1]-PRICES[i])), qty:Math.round(d[i]+t*(d[i+1]-d[i]))}; }
+  }
+  return null;
+}
+
+/* =======================================================================
+   모의 시장 : 카드 배부 & 매칭 (교사 권한으로 계산 → 충돌 없음)
+   ======================================================================= */
+function pick(pool){ return pool[Math.floor(Math.random()*pool.length)]; }
+function assignMarketCards(){
+  const ids=Object.keys(liveData.students||{});
+  if(ids.length<2){ toast('학생이 2명 이상 필요해요'); return; }
+  const players=ids.slice();
+  if(players.length%2===1) players.push('BOT');   // 홀수면 도우미 봇 추가 → 모두 짝 성립
+  // 섞어서 절반 구매자, 절반 판매자
+  for(let i=players.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [players[i],players[j]]=[players[j],players[i]]; }
+  const half=players.length/2;
+  const cards={};
+  players.forEach((id,idx)=>{
+    if(idx<half) cards[id]={role:'buyer',  value:pick(BUYER_POOL)};
+    else         cards[id]={role:'seller', value:pick(SELLER_POOL)};
+  });
+  const upd={}; upd['market/cards']=cards; upd['market/offers']=null; upd['market/result']=null;
+  roomRef.update(upd); toast('카드를 나눠줬어요! (구매자 '+half+' · 판매자 '+half+')');
+}
+function computeMarket(){
+  const cards=(liveData.market||{}).cards||{};
+  const offers=(liveData.market||{}).offers||{};
+  const buyers=[], sellers=[];
+  Object.entries(cards).forEach(([id,c])=>{
+    let off = offers[id]!=null ? offers[id] : c.value;  // 미제출자는 카드값으로 기본 제안
+    if(c.role==='buyer') buyers.push({id, bid:off, value:c.value});
+    else sellers.push({id, ask:off, cost:c.value});
+  });
+  buyers.sort((a,b)=>b.bid-a.bid);
+  sellers.sort((a,b)=>a.ask-b.ask);
+  const k=Math.min(buyers.length, sellers.length);
+  const trades=[];
+  for(let i=0;i<k;i++){
+    const b=buyers[i], s=sellers[i];
+    let price=Math.round((b.bid+s.ask)/2/MKT_UNIT)*MKT_UNIT;
+    price=Math.max(s.cost, Math.min(b.value, price));      // 둘 다 이익 보장
+    price=Math.round(price/MKT_UNIT)*MKT_UNIT;
+    trades.push({price, buyerId:b.id, sellerId:s.id, value:b.value, cost:s.cost,
+      bProfit:b.value-price, sProfit:price-s.cost});
+  }
+  return trades;
+}
+function runMarket(){
+  const trades=computeMarket();
+  if(!trades.length){ toast('먼저 카드를 나눠주세요'); return; }
+  roomRef.child('market/result').set({trades, ts:Date.now()});
+  toast(trades.length+'건 거래 체결!');
+}
+
+/* =======================================================================
+   렌더링
+   ======================================================================= */
+function renderCurrent(){
+  const idx=liveData.screenIndex||0, sc=SCREENS[idx];
+  if(role==='teacher') renderTeacher(sc, idx); else renderStudent(sc, idx);
+}
+function progressBar(idx){
+  const pct=Math.round(idx/(SCREENS.length-1)*100);
+  return `<div class="stepbar"><span class="pill">방 ${pin}</span>
+    <div class="prog"><i style="width:${pct}%"></i></div>
+    <span class="muted" style="font-size:13px">${idx+1}/${SCREENS.length}</span></div>`;
+}
+function teacherNav(extra){
+  return `<div class="nav">${extra||''}
+    <button class="btn btn-ghost" onclick="teacherGo(-1)">← 이전</button>
+    <button class="btn btn-brand grow" onclick="teacherGo(1)">다음 →</button></div>`;
+}
+function look(emoji,txt){ return `<div class="look"><span class="emoji">${emoji}</span>${txt}</div>`; }
+
+/* --------------------------- 교사 --------------------------- */
+function renderTeacher(sc, idx){
+  const nStudents=Object.keys(liveData.students||{}).length;
+  let body='', extra='';
+  if(sc.t==='lobby'){
+    const names=Object.values(liveData.students||{}).map(s=>s.name);
+    body=`<div style="text-align:center"><h2>학생들을 기다리는 중…</h2>
+      <p class="muted">학생들에게 방 번호를 알려주세요</p><div class="pin">${pin}</div>
+      <div class="pill">참여 ${nStudents}명</div>
+      <div class="students" style="justify-content:center">${names.map(n=>`<span class="chip">${esc(n)}</span>`).join('')||'<span class="muted">아직 없어요</span>'}</div></div>`;
+  }
+  else if(sc.t==='standards'){
+    body=`<h2 style="text-align:center">📚 오늘의 배움 (2022 개정 교육과정)</h2>
+      <div class="std">[9사(일사)09-02] 수요 법칙과 공급 법칙을 사례를 통해 도출하고, 이를 토대로 <b>시장 가격이 결정되는 원리</b>를 설명한다.</div>
+      <div class="std">[9사(일사)09-03] 시장경제에서 수요와 공급을 변화시키는 요인을 조사하고, <b>시장 가격의 변동</b>에 대응하는 방안을 계획한다.</div>
+      <p class="muted" style="text-align:center;margin-top:14px">🍗 오늘은 <b>치킨 시장</b>에서 우리가 직접 수요·공급 곡선을 만들고, 모의 시장 게임으로 균형 가격을 찾아봐요.</p>`;
+  }
+  else if(sc.t==='demand_intro'){
+    body=introBlock('🍗 1단계. 수요의 법칙 찾기','치킨 1마리를 <b>살지 말지</b> 가격마다 정해볼 거예요.<br>가격이 오르면 사려는 사람은 어떻게 될까요?','demand');
+  }
+  else if(sc.t==='supply_intro'){
+    body=introBlock('🏪 3단계. 공급의 법칙 찾기','여러분은 이제 <b>치킨 가게 사장님</b>!<br>원하는 가격 어디든 <b>자유롭게 팔 수 있어요.</b><br>제시되는 가격마다 <b>팔지 말지</b> 정해보세요. (원가 '+won(9000)+')','supply');
+  }
+  else if(sc.t==='demand_price'||sc.t==='supply_price'){
+    const kind=sc.t==='demand_price'?'demand':'supply';
+    const c=rawCounts(kind)[sc.price]; const wait=Math.max(0,nStudents-c.yes-c.no);
+    const role2=kind==='demand'?'':'<br><span class="muted" style="font-size:15px">원하는 가격 어디든 자유롭게 판매 가능 · 원가 '+won(9000)+'</span>';
+    body=`<h2 style="text-align:center">${kind==='demand'?'🍗 치킨 1마리, 이 가격이면 살까요?':'🏪 사장님, 이 가격에 팔까요?'} ${role2}</h2>
+      <div class="price-big">${won(sc.price)}</div>
+      <div class="tally">
+        <div class="tbox t-yes"><div class="n">${c.yes}</div><div class="l">${kind==='demand'?'👍 살래요':'👍 팔래요'}</div></div>
+        <div class="tbox t-no"><div class="n">${c.no}</div><div class="l">✋ 안 할래요</div></div>
+        <div class="tbox t-wait"><div class="n">${wait}</div><div class="l">⏳ 미응답</div></div></div>
+      <p class="muted" style="text-align:center">모두 응답하면 <b>다음 →</b></p>`;
+  }
+  else if(sc.t==='demand_curve'){
+    body=`<h2 style="text-align:center">📉 우리 반 수요 곡선</h2>
+      <p class="muted" style="text-align:center">가격이 오를수록 수요량이 줄어드는 걸 확인해요. (장난 응답 자동 보정)</p>
+      <canvas id="chart" height="320"></canvas>`;
+  }
+  else if(sc.t==='supply_curve'){
+    body=`<h2 style="text-align:center">📈 우리 반 공급 곡선</h2>
+      <p class="muted" style="text-align:center">가격이 오를수록 공급량이 늘어나는 걸 확인해요.</p>
+      <canvas id="chart" height="320"></canvas>`;
+  }
+  else if(sc.t==='both_curve'){
+    const eq=equilibrium();
+    body=`<h2 style="text-align:center">⚖️ 수요와 공급이 만나면?</h2>
+      <p class="muted" style="text-align:center">두 곡선이 만나는 <b>초록별 ⭐</b> 지점이 바로 <b>균형</b>이에요!</p>
+      <canvas id="chart" height="320"></canvas>
+      ${eq?`<div class="sentence" style="text-align:center;background:#e7f6ec;color:#166534;font-size:20px;margin-top:14px">수요·공급이 만나는 곳 ≈ 약 <b>${won(eq.price)}</b> 부근</div>`:''}`;
+  }
+  else if(sc.t==='demand_written'||sc.t==='supply_written'){
+    body=writtenTeacher(sc.t==='demand_written'?'demand':'supply');
+  }
+  else if(sc.t==='price_who'){
+    body=`<h2 style="text-align:center">🤔 5단계. 치킨 가격은 누가 정할까요?</h2>
+      <p class="muted" style="text-align:center">학생들이 자유롭게 생각을 적어요.</p>${textList('who')}`;
+  }
+  else if(sc.t==='market_intro'){
+    const cards=(liveData.market||{}).cards||{};
+    const nCards=Object.keys(cards).length;
+    const nb=Object.values(cards).filter(c=>c.role==='buyer').length;
+    const ns=Object.values(cards).filter(c=>c.role==='seller').length;
+    body=`<h2 style="text-align:center">🎮 6단계. 치킨 모의 시장 게임</h2>
+      <div class="std">규칙: 학급의 절반은 <b>구매자(수요자)</b>, 절반은 <b>판매자(공급자)</b>가 됩니다. 각자 카드를 받아요.
+      <br>· 구매자: 카드의 <b>만족 가치</b>보다 <b>싸게</b> 사면 이익!
+      <br>· 판매자: 카드의 <b>원가</b>보다 <b>비싸게</b> 팔면 이익!
+      <br>· 거래는 1,000원 단위. 자기 카드 금액은 비밀!</div>
+      ${nCards? `<p style="text-align:center" class="pill">카드 배부됨 · 구매자 ${nb} · 판매자 ${ns}</p>
+        <p class="muted" style="text-align:center">학생 화면에 카드가 떴어요. <b>다음 →</b> 을 눌러 거래를 시작하세요.</p>`
+      : `<p class="muted" style="text-align:center">현재 참여 ${nStudents}명. 아래 버튼으로 카드를 나눠주세요.</p>`}`;
+    extra=`<button class="btn btn-dark" onclick="assignMarketCards()">🃏 카드 나눠주기</button>`;
+  }
+  else if(sc.t==='market_trade'){
+    const cards=(liveData.market||{}).cards||{};
+    const offers=(liveData.market||{}).offers||{};
+    const submitted=Object.keys(offers).length;
+    const total=Object.keys(cards).filter(id=>id!=='BOT').length;
+    const done=!!(liveData.market||{}).result;
+    body=`<h2 style="text-align:center">🤝 거래하는 중…</h2>
+      <p class="muted" style="text-align:center">학생들이 각자 <b>희망 거래 가격</b>을 제출하고 있어요.</p>
+      <div class="tally"><div class="tbox t-yes"><div class="n">${submitted}</div><div class="l">희망가 제출</div></div>
+        <div class="tbox t-wait"><div class="n">${Math.max(0,total-submitted)}</div><div class="l">대기 중</div></div>
+        <div class="tbox t-no"><div class="n">${total}</div><div class="l">전체 거래자</div></div></div>
+      <p class="muted" style="text-align:center">모두 제출하면 <b>거래 체결하기</b>를 누르세요. ${done?'<b style="color:var(--ok)">✔ 체결 완료</b>':''}</p>`;
+    extra=`<button class="btn btn-ok" onclick="runMarket()">💥 거래 체결하기</button>`;
+  }
+  else if(sc.t==='market_result'){
+    body=marketResultTeacher();
+  }
+  else if(sc.t==='eq_written'){
+    body=eqWrittenTeacher();
+  }
+  else if(sc.t==='explain'){
+    body=`<h2 style="text-align:center">🗣️ 10단계. 설명하기</h2>
+      <p class="muted" style="text-align:center">"치킨 가격은 어떻게 정해질까?" 를 수요·공급으로 설명해 적어요.</p>${textList('explain')}`;
+  }
+  else if(sc.t==='summarize'){
+    body=`<h2 style="text-align:center">✏️ 11단계. 내 말로 정리하기</h2>
+      <p class="muted" style="text-align:center">오늘 배운 것을 한두 문장으로 정리해요.</p>${textList('summary')}`;
+  }
+  else if(sc.t==='end'){
+    const url=getSheetUrl();
+    body=`<div style="text-align:center;padding:14px"><div class="logo">🎉</div><h2>오늘 수업 끝!</h2>
+      <p class="muted">수요·공급 법칙부터 모의 시장 균형 가격까지, 우리 손으로 만들었어요.</p>
+      ${url?'<p class="muted">아래 버튼으로 모든 응답을 구글 시트로 보낼 수 있어요.</p>':'<p class="muted" style="font-size:13px">구글 시트로 내보내려면 설정에서 Apps Script URL을 넣으세요.</p>'}</div>`;
+    if(url) extra=`<button class="btn btn-dark" onclick="exportToSheet()">📊 구글 시트로 내보내기</button>`;
+  }
+  app.innerHTML=`<div class="wrap"><div class="card">${progressBar(idx)}${body}${teacherNav(extra)}</div></div>`;
+  drawChartIfNeeded(sc);
+}
+
+function introBlock(title,desc,kind){
+  const c=kind==='demand'?'var(--demand)':'var(--supply)';
+  return `<div style="text-align:center;padding:14px"><h1 style="color:${c}">${title}</h1>
+    <p style="font-size:22px;margin-top:16px">${desc}</p>
+    <p class="muted" style="margin-top:20px">준비됐으면 <b>다음 →</b></p></div>`;
+}
+function writtenTeacher(kind){
+  const store=respNode(kind==='demand'?'demandWritten':'supplyWritten');
+  const answers=Object.values(store), n=answers.length;
+  const pCount={상승:0,하락:0}, qCount={증가:0,감소:0};
+  answers.forEach(a=>{ if(a.p in pCount)pCount[a.p]++; if(a.q in qCount)qCount[a.q]++; });
+  const correctQ=kind==='demand'?'감소':'증가', target=kind==='demand'?'수요량':'공급량';
+  const law=kind==='demand'?'수요 법칙':'공급 법칙';
+  return `<h2 style="text-align:center">✍️ ${kind==='demand'?'2단계':'4단계'}. ${law}을 문장으로!</h2>
+    <div class="sentence" style="text-align:center">가격이 <span class="blank">[상승]</span> 하면, ${target}은 <span class="blank">[?]</span> 한다.</div>
+    <div class="grid2">
+      <div class="card" style="box-shadow:none"><b>가격은?</b>${barRow('상승',pCount.상승,n,true)}${barRow('하락',pCount.하락,n,false)}</div>
+      <div class="card" style="box-shadow:none"><b>${target}은?</b>${barRow('증가',qCount.증가,n,correctQ==='증가')}${barRow('감소',qCount.감소,n,correctQ==='감소')}</div></div>
+    <p class="muted" style="text-align:center;margin-top:10px">제출 ${n}명 · 초록색이 정답</p>
+    <div class="sentence" style="text-align:center;background:#e7f6ec;color:#166534;font-size:20px">정답: 가격이 <b>상승</b>하면, ${target}은 <b>${correctQ}</b>한다.</div>`;
+}
+function barRow(label,count,total,correct){
+  const pct=total?Math.round(count/total*100):0;
+  return `<div style="margin:10px 0"><div style="display:flex;justify-content:space-between;font-weight:700"><span>${label} ${correct?'✅':''}</span><span>${count}명</span></div>
+    <div class="prog" style="height:14px;margin-top:4px"><i style="width:${pct}%;background:${correct?'var(--ok)':'var(--brand)'}"></i></div></div>`;
+}
+function eqWrittenTeacher(){
+  const store=respNode('eqWritten'); const answers=Object.values(store), n=answers.length;
+  const aC={일치:0,초과:0}, bC={'균형 가격':0,'최고 가격':0};
+  answers.forEach(x=>{ if(x.a in aC)aC[x.a]++; if(x.b in bC)bC[x.b]++; });
+  return `<h2 style="text-align:center">✍️ 7단계. 균형을 문장으로!</h2>
+    <div class="sentence" style="text-align:center;font-size:22px">수요량과 공급량이 <span class="blank">[일치]</span> 하는 지점에서 결정되는 가격을 <span class="blank">[균형 가격]</span> (이)라고 한다.</div>
+    <div class="grid2">
+      <div class="card" style="box-shadow:none"><b>수요량과 공급량이…</b>${barRow('일치',aC.일치,n,true)}${barRow('초과',aC.초과,n,false)}</div>
+      <div class="card" style="box-shadow:none"><b>그 가격을…</b>${barRow('균형 가격',bC['균형 가격'],n,true)}${barRow('최고 가격',bC['최고 가격'],n,false)}</div></div>
+    <p class="muted" style="text-align:center;margin-top:10px">제출 ${n}명</p>
+    <div class="sentence" style="text-align:center;background:#e7f6ec;color:#166534;font-size:20px">정답: 수요량과 공급량이 <b>일치</b>하는 지점의 가격 = <b>균형 가격</b>, 그때의 거래량 = <b>균형 거래량</b></div>`;
+}
+function textList(key){
+  const store=(liveData.text||{})[key]||{}; const arr=Object.values(store);
+  return `<div class="pill" style="display:block;text-align:center;margin-top:8px">응답 ${arr.length}개</div>
+    <div class="resp-list">${arr.map(r=>`<div class="resp"><b>${esc(r.name)}</b> · ${esc(r.text)}</div>`).join('')||'<p class="muted" style="text-align:center">아직 응답이 없어요</p>'}</div>`;
+}
+function marketResultTeacher(){
+  const result=(liveData.market||{}).result;
+  if(!result||!result.trades||!result.trades.length)
+    return `<h2 style="text-align:center">📊 전체 거래 결과표</h2>${look('⏳','아직 거래가 체결되지 않았어요. 이전 화면에서 거래를 체결하세요.')}`;
+  const trades=result.trades;
+  const counts={}; trades.forEach(t=>counts[t.price]=(counts[t.price]||0)+1);
+  const prices=Object.keys(counts).map(Number).sort((a,b)=>a-b);
+  const maxC=Math.max(...Object.values(counts));
+  const modal=prices.filter(p=>counts[p]===maxC);
+  // 최고 이익 학생
+  let best={name:'-',profit:-Infinity};
+  trades.forEach(t=>{ if(t.bProfit>best.profit) best={name:nameOf(t.buyerId),profit:t.bProfit,role:'구매'};
+    if(t.sProfit>best.profit) best={name:nameOf(t.sellerId),profit:t.sProfit,role:'판매'}; });
+  const bars=prices.map(p=>{
+    const h=Math.round(counts[p]/maxC*100);
+    return `<div class="col ${counts[p]===maxC?'peak':''}"><div class="cnt">${counts[p]}</div>
+      <div class="bar" style="height:${h}%"></div><div class="px">${won(p)}</div></div>`;
+  }).join('');
+  return `<h2 style="text-align:center">📊 전체 거래 결과표 (치킨)</h2>
+    <p class="muted" style="text-align:center">거래가 가장 많이 몰린 <b style="color:var(--ok)">초록 막대</b>가 바로 시장 가격(균형 가격)이에요!</p>
+    <div class="hist">${bars}</div>
+    <div class="grid2" style="margin-top:8px">
+      <div class="sentence" style="text-align:center;background:#e7f6ec;color:#166534;font-size:20px">시장(균형) 가격<br><b>${modal.map(won).join(' ~ ')}</b></div>
+      <div class="sentence" style="text-align:center;font-size:20px">총 거래량<br><b>${trades.length}건</b></div></div>
+    <p style="text-align:center" class="pill">🏆 최고 이익: ${esc(best.name)} (${best.role} · ${won(best.profit)} 이익)</p>`;
+}
+
+/* --------------------------- 학생 --------------------------- */
+function renderStudent(sc, idx){
+  let body='';
+  const myPrice=(kind,price)=>{ const r=((liveData.responses||{})[kind]||{})[price]||{}; return sid in r ? r[sid] : null; };
+  if(sc.t==='lobby'){ body=look('⏳','입장 완료! 선생님이 시작하기를 기다려요.'); }
+  else if(sc.t==='standards'){ body=look('📚','오늘은 치킨 시장에서 수요·공급의 원리를 직접 만들어 봐요!'); }
+  else if(sc.t==='demand_intro'){ body=look('🍗','지금부터 치킨을 <b>살지 말지</b> 정할 거예요!'); }
+  else if(sc.t==='supply_intro'){ body=look('🏪','이제 <b>치킨 가게 사장님</b>이에요. 원하는 가격에 자유롭게 팔 수 있어요!'); }
+  else if(sc.t==='demand_price'||sc.t==='supply_price'){
+    const kind=sc.t==='demand_price'?'demand':'supply'; const mine=myPrice(kind,sc.price);
+    const yesLabel=kind==='demand'?'👍 살래요':'👍 팔래요';
+    const q=kind==='demand'?'이 가격이면 치킨을 살래요?':'이 가격에 치킨을 팔래요?<br><span class="muted" style="font-size:15px">원하는 가격 어디든 자유롭게 · 원가 '+won(9000)+'</span>';
+    body=`<h2 style="text-align:center">${q}</h2><div class="price-big">${won(sc.price)}</div>
+      <button class="btn btn-big" style="background:${mine===true?'var(--ok)':'#e7f6ec'};color:${mine===true?'#fff':'var(--ok)'}" onclick="studentAnswerPrice('${kind}',${sc.price},true)">${yesLabel}</button>
+      <div style="height:12px"></div>
+      <button class="btn btn-big" style="background:${mine===false?'var(--supply)':'#fdeaea'};color:${mine===false?'#fff':'var(--supply)'}" onclick="studentAnswerPrice('${kind}',${sc.price},false)">✋ 안 할래요</button>
+      <p class="muted" style="text-align:center;margin-top:14px">${mine===null?'하나를 골라주세요':'제출됨! 바꾸려면 다시 누르세요'}</p>`;
+  }
+  else if(sc.t==='demand_curve'||sc.t==='supply_curve'||sc.t==='both_curve'){
+    body=look('👀','선생님 화면(칠판)을 봐주세요!<br>우리 반 곡선이 그려지고 있어요.');
+  }
+  else if(sc.t==='demand_written'||sc.t==='supply_written'){
+    const kind=sc.t==='demand_written'?'demand':'supply';
+    const node=kind==='demand'?'demandWritten':'supplyWritten';
+    const mine=(respNode(node))[sid]; const target=kind==='demand'?'수요량':'공급량';
+    const correctQ=kind==='demand'?'감소':'증가';
+    let fb='';
+    if(mine){ const ok=(mine.p==='상승'&&mine.q===correctQ);
+      fb=ok?`<div class="fb fb-ok">✅ 정답이에요! 잘했어요 🎉</div>`
+           :`<div class="fb fb-bad">❌ 다시 생각해볼까요?<br><span style="font-weight:600;font-size:15px">힌트: ${kind==='demand'?'값이 비싸지면 사려는 사람은 줄어요.':'값이 비싸지면 팔려는 사람은 늘어요.'}</span></div>`; }
+    body=`<h2 style="text-align:center">✍️ 문장을 완성해요</h2>
+      <div class="sentence" style="font-size:20px;text-align:center">가격이
+        <select id="w_p" style="width:auto;display:inline-block"><option value="">▼</option>
+          <option ${mine&&mine.p==='상승'?'selected':''}>상승</option><option ${mine&&mine.p==='하락'?'selected':''}>하락</option></select>
+        하면,<br>${target}은
+        <select id="w_q" style="width:auto;display:inline-block"><option value="">▼</option>
+          <option ${mine&&mine.q==='증가'?'selected':''}>증가</option><option ${mine&&mine.q==='감소'?'selected':''}>감소</option></select> 한다.</div>
+      <button class="btn btn-brand btn-big" onclick="studentWritten('${node}')">${mine?'다시 제출':'제출하기'}</button>${fb}`;
+  }
+  else if(sc.t==='price_who'){ body=studentTextBox('who','🤔 치킨 가격은 누가 정할까요?','자유롭게 생각을 적어보세요'); }
+  else if(sc.t==='explain'){ body=studentTextBox('explain','🗣️ 치킨 가격은 어떻게 정해질까?','수요와 공급을 이용해 설명해보세요'); }
+  else if(sc.t==='summarize'){ body=studentTextBox('summary','✏️ 오늘 배운 것 정리','한두 문장으로 정리해보세요'); }
+  else if(sc.t==='market_intro'){ body=studentCard('선생님이 거래를 시작하면 희망 가격을 낼 수 있어요.'); }
+  else if(sc.t==='market_trade'){ body=studentMarketTrade(); }
+  else if(sc.t==='market_result'){ body=studentMarketResult(); }
+  else if(sc.t==='eq_written'){
+    const mine=(respNode('eqWritten'))[sid];
+    let fb='';
+    if(mine){ const ok=(mine.a==='일치'&&mine.b==='균형 가격');
+      fb=ok?`<div class="fb fb-ok">✅ 정답이에요! 🎉</div>`
+           :`<div class="fb fb-bad">❌ 다시 생각해볼까요?<br><span style="font-weight:600;font-size:15px">힌트: 수요량과 공급량이 딱 맞는 지점의 가격이에요.</span></div>`; }
+    body=`<h2 style="text-align:center">✍️ 균형을 완성해요</h2>
+      <div class="sentence" style="font-size:19px;text-align:center">수요량과 공급량이
+        <select id="e_a" style="width:auto;display:inline-block"><option value="">▼</option>
+          <option ${mine&&mine.a==='일치'?'selected':''}>일치</option><option ${mine&&mine.a==='초과'?'selected':''}>초과</option></select>
+        하는 지점의 가격을<br>
+        <select id="e_b" style="width:auto;display:inline-block"><option value="">▼</option>
+          <option ${mine&&mine.b==='균형 가격'?'selected':''}>균형 가격</option><option ${mine&&mine.b==='최고 가격'?'selected':''}>최고 가격</option></select> (이)라고 한다.</div>
+      <button class="btn btn-brand btn-big" onclick="studentEq()">${mine?'다시 제출':'제출하기'}</button>${fb}`;
+  }
+  else if(sc.t==='end'){ body=look('🎉','수고했어요! 오늘 치킨 시장에서 수요·공급과 균형 가격을 모두 배웠어요.'); }
+  app.innerHTML=`<div class="wrap"><div class="card">${body}</div></div>`;
+}
+function studentTextBox(key,title,ph){
+  const mine=((liveData.text||{})[key]||{})[sid];
+  return `<h2 style="text-align:center">${title}</h2>
+    <textarea id="txt" style="height:120px" placeholder="${ph}">${mine?esc(mine.text):''}</textarea>
+    <div style="height:12px"></div>
+    <button class="btn btn-brand btn-big" onclick="studentText('${key}')">${mine?'다시 제출':'제출하기'}</button>
+    ${mine?'<p class="muted" style="text-align:center;margin-top:10px">제출 완료 ✅</p>':''}`;
+}
+function myCard(){ return ((liveData.market||{}).cards||{})[sid]; }
+function studentCard(footer){
+  const c=myCard();
+  if(!c) return look('🃏','곧 카드를 받아요. 잠시만 기다려주세요!');
+  const buy=c.role==='buyer';
+  return `<div class="gamecard ${buy?'gc-buy':'gc-sell'}">
+      <div class="role">${buy?'🛒 나는 구매자 (수요자)':'🏪 나는 판매자 (공급자)'}</div>
+      <div class="val">${won(c.value)}</div>
+      <div class="hint">${buy?'이 치킨은 나에게 '+won(c.value)+'의 가치! <br>이보다 <b>싸게</b> 사면 이익이에요.':'내 치킨 원가는 '+won(c.value)+'. <br>이보다 <b>비싸게</b> 팔면 이익이에요.'}</div>
+    </div>
+    <p class="muted" style="text-align:center;font-size:14px">🤫 내 카드 금액은 친구에게 비밀!</p>
+    <p class="muted" style="text-align:center">${footer||''}</p>`;
+}
+function studentMarketTrade(){
+  const c=myCard();
+  if(!c) return look('🃏','카드를 기다리는 중…');
+  const result=(liveData.market||{}).result;
+  if(result){ return studentMarketResult(); }
+  const buy=c.role==='buyer';
+  const mine=((liveData.market||{}).offers||{})[sid];
+  return studentCard('')+`
+    <label style="text-align:center">${buy?'얼마에 사고 싶나요? (희망 구매가)':'얼마에 팔고 싶나요? (희망 판매가)'}</label>
+    <input id="offer" inputmode="numeric" placeholder="1,000원 단위" value="${mine||''}" style="text-align:center;font-size:24px">
+    <div style="height:12px"></div>
+    <button class="btn btn-brand btn-big" onclick="studentOffer()">${mine?'다시 제출':'희망 가격 제출'}</button>
+    ${mine?'<p class="muted" style="text-align:center;margin-top:8px">제출: '+won(mine)+' · 거래 체결을 기다려요</p>':''}`;
+}
+function studentMarketResult(){
+  const c=myCard(); const result=(liveData.market||{}).result;
+  if(!result) return look('👀','선생님이 거래를 체결하면 결과가 나와요!');
+  const t=result.trades.find(x=>x.buyerId===sid||x.sellerId===sid);
+  if(!t) return look('🙂','이번엔 거래가 안 됐어요. 다음 기회에!');
+  const buy=t.buyerId===sid; const profit=buy?t.bProfit:t.sProfit;
+  return `<div class="gamecard ${buy?'gc-buy':'gc-sell'}">
+      <div class="role">🎉 거래 성사!</div>
+      <div class="val">${won(t.price)}</div>
+      <div class="hint">${buy?'구매':'판매'} 완료 · 내 이익 <b>${won(profit)}</b></div></div>
+    <p class="muted" style="text-align:center">칠판의 <b>전체 거래 결과표</b>를 함께 봐요!</p>`;
+}
+
+/* --------------------------- 차트 --------------------------- */
+function drawChartIfNeeded(sc){
+  const el=document.getElementById('chart');
+  if(!el){ if(chart){chart.destroy(); chart=null;} return; }
+  const showD=(sc.t==='demand_curve'||sc.t==='both_curve');
+  const showS=(sc.t==='supply_curve'||sc.t==='both_curve');
+  const dD=displayDemand(), dS=displaySupply(); const datasets=[]; let maxX=1;
+  if(showD){ maxX=Math.max(maxX,...dD);
+    datasets.push({label:'수요량', data:PRICES.map((p,i)=>({x:dD[i],y:p})), borderColor:'#2563eb',backgroundColor:'#2563eb',tension:0,borderWidth:5,pointRadius:7,order:2}); }
+  if(showS){ maxX=Math.max(maxX,...dS);
+    datasets.push({label:'공급량', data:PRICES.map((p,i)=>({x:dS[i],y:p})), borderColor:'#dc2626',backgroundColor:'#dc2626',tension:0,borderWidth:5,pointRadius:7,order:2}); }
+  const eq=(showD&&showS)?equilibrium():null;
+  if(eq) datasets.push({label:'균형점 ⭐', data:[{x:eq.qty,y:eq.price}], borderColor:'#16a34a',backgroundColor:'#16a34a',pointRadius:11,pointStyle:'star',showLine:false,order:1});
+  if(chart) chart.destroy();
+  chart=new Chart(el,{ type:'line', data:{datasets},
+    options:{responsive:true, animation:{duration:500},
+      plugins:{legend:{labels:{font:{size:16},usePointStyle:true}},
+        tooltip:{callbacks:{label:c=>`가격 ${Number(c.parsed.y).toLocaleString('ko')}원 · 수량 ${c.parsed.x}`}}},
+      scales:{ x:{type:'linear',title:{display:true,text:'수량 (명)',font:{size:15,weight:'bold'}},min:0,suggestedMax:maxX+1,ticks:{stepSize:1,precision:0}},
+        y:{type:'linear',title:{display:true,text:'가격 (원)',font:{size:15,weight:'bold'}},min:0,suggestedMax:75000,ticks:{stepSize:10000,callback:v=>Number(v).toLocaleString('ko')}}}}});
+}
+
+/* --------------------------- 구글 시트 내보내기 --------------------------- */
+function exportToSheet(){
+  const url=getSheetUrl(); if(!url){ toast('설정에서 시트 URL을 넣으세요'); return; }
+  const students=liveData.students||{}, r=liveData.responses||{}, text=liveData.text||{}, market=liveData.market||{};
+  const rows=[];
+  Object.entries(students).forEach(([id,st])=>{
+    const nm=st.name;
+    // 수요/공급 응답
+    PRICES.forEach(p=>{ const dv=((r.demand||{})[p]||{})[id]; if(dv!==undefined) rows.push([nm,'수요',won(p),dv?'산다':'안산다']); });
+    PRICES.forEach(p=>{ const sv=((r.supply||{})[p]||{})[id]; if(sv!==undefined) rows.push([nm,'공급',won(p),sv?'판다':'안판다']); });
+    const dw=(r.demandWritten||{})[id]; if(dw) rows.push([nm,'수요법칙서술','가격 '+dw.p,'수요량 '+dw.q]);
+    const sw=(r.supplyWritten||{})[id]; if(sw) rows.push([nm,'공급법칙서술','가격 '+sw.p,'공급량 '+sw.q]);
+    const ew=(r.eqWritten||{})[id]; if(ew) rows.push([nm,'균형서술',ew.a,ew.b]);
+    ['who','explain','summary'].forEach(k=>{ const tx=(text[k]||{})[id]; if(tx) rows.push([nm,k,'',tx.text]); });
+  });
+  (((market.result||{}).trades)||[]).forEach(t=>{
+    rows.push([nameOf(t.buyerId),'모의시장-구매',won(t.price),'이익 '+won(t.bProfit)]);
+    rows.push([nameOf(t.sellerId),'모의시장-판매',won(t.price),'이익 '+won(t.sProfit)]);
+  });
+  fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({pin, when:new Date().toISOString(), rows})})
+    .then(()=>toast('구글 시트로 보냈어요! ('+rows.length+'행) 시트를 확인하세요'))
+    .catch(()=>toast('전송 오류 — URL을 확인해보세요'));
+}
+
+renderLanding();
+</script>
+</body>
+</html>
