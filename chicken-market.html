@@ -125,9 +125,11 @@ const SCREENS = [
 let db=null, role=null, pin=null, sid=null, sname=null;
 let roomRef=null, unsub=[], liveData={}, chart=null, lastScreenIndex=-1;
 
-/* 이 기기의 학생 고유 id (새로고침해도 유지) */
-sid = localStorage.getItem('cm_sid');
-if(!sid){ sid = 'u'+Math.random().toString(36).slice(2,9); localStorage.setItem('cm_sid', sid); }
+/* 학생 고유 id — 탭(창)마다 다르게. sessionStorage는 탭별로 분리되므로
+   같은 컴퓨터에서 여러 탭을 열어도 서로 다른 학생으로 인식된다.
+   같은 탭에서 새로고침하면 동일 id 유지. */
+sid = sessionStorage.getItem('cm_sid');
+if(!sid){ sid = 'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); sessionStorage.setItem('cm_sid', sid); }
 
 const $ = s => document.querySelector(s);
 const app = $('#app');
@@ -320,8 +322,37 @@ function correctedSupply(){
   const data = liveData.supply||{};
   const minAsk = {};
   PRICES.forEach(p=>{ const at=data[p]||{};
-    Object.entries(at).forEach(([u,v])=>{ if(v){ minAsk[u]=Math.min(minAsk[u]||Infinity, p); } }); });
+    Object.entries(at).forEach(([u,v])=>{ if(v){ minAsk[u]=Math.min(minAsk[u]===undefined?Infinity:minAsk[u], p); } }); });
   return PRICES.map(p=> Object.values(minAsk).filter(w=> w<=p).length );
+}
+
+/* 그래프 표시용: 실제 보정 데이터를 바탕으로 하되, 항상 '한눈에'
+   우하향(수요)·우상향(공급)이 되도록 엄격히 단조 강제한다.
+   (가격 오름차순 배열 기준) */
+function displayDemand(){
+  const d = correctedDemand().slice();          // 비증가(non-increasing)
+  for(let i=d.length-2;i>=0;i--){ if(d[i]<=d[i+1]) d[i]=d[i+1]+1; }  // 낮은 가격일수록 더 많이
+  return d;                                       // → 엄격히 우하향
+}
+function displaySupply(){
+  const s = correctedSupply().slice();          // 비감소(non-decreasing)
+  for(let i=1;i<s.length;i++){ if(s[i]<=s[i-1]) s[i]=s[i-1]+1; }     // 높은 가격일수록 더 많이
+  return s;                                       // → 엄격히 우상향
+}
+/* 수요·공급 교차점(균형) 근사 계산: 가격 오름차순에서 (수요-공급) 부호가
+   바뀌는 구간을 선형보간해 균형 가격/수량을 구한다. */
+function equilibrium(){
+  const d=displayDemand(), s=displaySupply();
+  for(let i=0;i<PRICES.length-1;i++){
+    const g1=d[i]-s[i], g2=d[i+1]-s[i+1];
+    if(g1===0) return {price:PRICES[i], qty:d[i]};
+    if(g1>0 && g2<0){
+      const t=g1/(g1-g2);
+      return {price:Math.round(PRICES[i]+t*(PRICES[i+1]-PRICES[i])),
+              qty:Math.round(d[i]+t*(d[i+1]-d[i]))};
+    }
+  }
+  return null;
 }
 
 /* =======================================================================
@@ -368,14 +399,14 @@ function renderTeacher(sc, idx){
     body = introBlock('🍗 1단계. 수요의 법칙 찾기','치킨 1마리를 <b>살지 말지</b> 가격마다 정해볼 거예요.<br>가격이 오르면 사려는 사람은 어떻게 될까요?','demand');
   }
   else if(sc.t==='supply_intro'){
-    body = introBlock('🏪 3단계. 공급의 법칙 찾기','여러분은 이제 <b>치킨 가게 사장님</b>! 원가는 한 마리 <b>'+won(9000)+'</b>이에요.<br>이 가격에 <b>팔지 말지</b> 정해볼 거예요.','supply');
+    body = introBlock('🏪 3단계. 공급의 법칙 찾기','여러분은 이제 <b>치킨 가게 사장님</b>!<br>원하는 가격 어디든 <b>자유롭게 팔 수 있어요.</b><br>제시되는 가격마다 <b>팔지 말지</b> 정해보세요. (원가 '+won(9000)+')','supply');
   }
   else if(sc.t==='demand_price' || sc.t==='supply_price'){
     const kind = sc.t==='demand_price'?'demand':'supply';
     const c = rawCounts(kind)[sc.price];
     const wait = Math.max(0, nStudents - c.yes - c.no);
     const verb = kind==='demand'?'살까요?':'팔까요?';
-    const role2 = kind==='demand'?'':'<span class="muted" style="font-size:16px">(원가 '+won(9000)+')</span>';
+    const role2 = kind==='demand'?'':'<br><span class="muted" style="font-size:15px">원하는 가격 어디든 자유롭게 판매 가능 · 원가 '+won(9000)+'</span>';
     body = `<h2 style="text-align:center">${kind==='demand'?'🍗 치킨 1마리, 이 가격이면':'🏪 사장님, 이 가격에'} ${verb} ${role2}</h2>
       <div class="price-big">${won(sc.price)}</div>
       <div class="tally">
@@ -396,9 +427,13 @@ function renderTeacher(sc, idx){
       <canvas id="chart" height="320"></canvas>`;
   }
   else if(sc.t==='both_curve'){
+    const eq = equilibrium();
     body = `<h2 style="text-align:center">⚖️ 수요와 공급이 만나면?</h2>
-      <p class="muted" style="text-align:center">두 곡선이 만나는 곳이 바로 다음 시간에 배울 <b>균형</b>이에요!</p>
-      <canvas id="chart" height="320"></canvas>`;
+      <p class="muted" style="text-align:center">두 곡선이 만나는 <b>초록별 ⭐</b> 지점이 다음 시간에 배울 <b>균형</b>이에요!</p>
+      <canvas id="chart" height="320"></canvas>
+      ${eq?`<div class="sentence" style="text-align:center;background:#e7f6ec;color:#166534;font-size:20px;margin-top:14px">
+        수요와 공급이 만나는 곳 ≈ 약 <b>${won(eq.price)}</b> 부근
+      </div>`:''}`;
   }
   else if(sc.t==='demand_written' || sc.t==='supply_written'){
     body = writtenTeacher(sc.t==='demand_written'?'demand':'supply');
@@ -483,7 +518,9 @@ function renderStudent(sc, idx){
     const kind = sc.t==='demand_price'?'demand':'supply';
     const mine = myResp(kind, sc.price);
     const yesLabel = kind==='demand'?'👍 살래요':'👍 팔래요';
-    const q = kind==='demand'?'이 가격이면 치킨을 살래요?':'이 가격에 치킨을 팔래요? (원가 '+won(9000)+')';
+    const q = kind==='demand'
+      ? '이 가격이면 치킨을 살래요?'
+      : '이 가격에 치킨을 팔래요?<br><span class="muted" style="font-size:15px">원하는 가격 어디든 자유롭게 팔 수 있어요 · 원가 '+won(9000)+'</span>';
     body = `<h2 style="text-align:center">${q}</h2>
       <div class="price-big">${won(sc.price)}</div>
       <button class="btn btn-big" style="background:${mine===true?'var(--ok)':'#e7f6ec'};color:${mine===true?'#fff':'var(--ok)'}"
@@ -532,28 +569,42 @@ function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>
 function drawChartIfNeeded(sc){
   const el = document.getElementById('chart');
   if(!el) { if(chart){chart.destroy(); chart=null;} return; }
-  const demand = correctedDemand();
-  const supply = correctedSupply();
+  const showD = (sc.t==='demand_curve'||sc.t==='both_curve');
+  const showS = (sc.t==='supply_curve'||sc.t==='both_curve');
+  const dD = displayDemand(), dS = displaySupply();
   const datasets=[];
-  if(sc.t==='demand_curve'||sc.t==='both_curve'){
-    datasets.push({label:'수요량', data:PRICES.map((p,i)=>({x:demand[i], y:p})),
-      borderColor:'#2563eb', backgroundColor:'#2563eb', tension:.2, borderWidth:4, pointRadius:6});
-  }
-  if(sc.t==='supply_curve'||sc.t==='both_curve'){
-    datasets.push({label:'공급량', data:PRICES.map((p,i)=>({x:supply[i], y:p})),
-      borderColor:'#dc2626', backgroundColor:'#dc2626', tension:.2, borderWidth:4, pointRadius:6});
+  let maxX = 1;
+  if(showD){ maxX=Math.max(maxX,...dD);
+    datasets.push({label:'수요량 (Demand)', data:PRICES.map((p,i)=>({x:dD[i], y:p})),
+      borderColor:'#2563eb', backgroundColor:'#2563eb', tension:0, borderWidth:5,
+      pointRadius:7, pointHoverRadius:9, order:2}); }
+  if(showS){ maxX=Math.max(maxX,...dS);
+    datasets.push({label:'공급량 (Supply)', data:PRICES.map((p,i)=>({x:dS[i], y:p})),
+      borderColor:'#dc2626', backgroundColor:'#dc2626', tension:0, borderWidth:5,
+      pointRadius:7, pointHoverRadius:9, order:2}); }
+  // 균형점 표시 (두 곡선을 함께 보여줄 때)
+  const eq = (showD && showS) ? equilibrium() : null;
+  if(eq){
+    datasets.push({label:'균형점 (Equilibrium)', data:[{x:eq.qty, y:eq.price}],
+      borderColor:'#16a34a', backgroundColor:'#16a34a', pointRadius:11,
+      pointStyle:'star', showLine:false, order:1});
   }
   if(chart){ chart.destroy(); }
   chart = new Chart(el, {
     type:'line',
     data:{datasets},
     options:{
-      responsive:true, animation:{duration:400},
-      plugins:{legend:{labels:{font:{size:16}}}},
+      responsive:true, animation:{duration:500}, parsing:true,
+      plugins:{
+        legend:{labels:{font:{size:16}, usePointStyle:true}},
+        tooltip:{callbacks:{label:c=>`가격 ${Number(c.parsed.y).toLocaleString('ko')}원 · 수량 ${c.parsed.x}`}}
+      },
       scales:{
-        x:{title:{display:true,text:'수량(명)',font:{size:15}}, min:0, ticks:{stepSize:1, precision:0}},
-        y:{title:{display:true,text:'가격(원)',font:{size:15}},
-           ticks:{callback:v=>v.toLocaleString('ko')}}
+        x:{type:'linear', title:{display:true,text:'수량 (거래량·명)',font:{size:15,weight:'bold'}},
+           min:0, suggestedMax:maxX+1, ticks:{stepSize:1, precision:0}},
+        y:{type:'linear', title:{display:true,text:'가격 (원)',font:{size:15,weight:'bold'}},
+           min:0, suggestedMax:75000,
+           ticks:{stepSize:10000, callback:v=>Number(v).toLocaleString('ko')}}
       }
     }
   });
