@@ -187,6 +187,7 @@ const BUYER_POOL  = [9000, 10000, 11000, 12000, 13000];  // 구매자 만족 가
 const SELLER_POOL = [4000, 5000, 6000, 7000, 8000];      // 판매자 원가
 const MKT_UNIT = 1000;
 const MAX_ROUND = 3;
+const ROUND_SECONDS = 60;   // 라운드당 제한시간
 
 const SCREENS = [
   {t:'lobby'},
@@ -339,8 +340,28 @@ function nextRound(){
   const m=liveData.market||{}; const cur=m.round||1;
   if(!m.cards){ toast('먼저 카드를 나눠주세요'); return; }
   if(cur>=MAX_ROUND){ toast('마지막 라운드예요. 아래 다음 → 으로 결과 확인'); return; }
-  roomRef.update({'market/round':cur+1,'market/book':null,'market/matched':null,'market/requests':null});
-  toast((cur+1)+'라운드 시작!');
+  roomRef.update({'market/round':cur+1,'market/book':null,'market/matched':null,'market/requests':null,'market/roundEndsAt':Date.now()+ROUND_SECONDS*1000});
+  toast((cur+1)+'라운드 시작! ⏱'+ROUND_SECONDS+'초');
+}
+function startRoundTimer(){ if(!(liveData.market||{}).cards){ toast('먼저 카드를 나눠주세요'); return; }
+  roomRef.child('market/roundEndsAt').set(Date.now()+ROUND_SECONDS*1000); toast('⏱ '+ROUND_SECONDS+'초 시작!'); }
+function roundExpired(){ const e=(liveData.market||{}).roundEndsAt; return !!(e && Date.now()>e); }
+function profitBySid(){ const m={}; dealsArr().forEach(d=>{ m[d.buyerId]=(m[d.buyerId]||0)+d.bProfit; m[d.sellerId]=(m[d.sellerId]||0)+d.sProfit; }); return m; }
+function leaderboardHtml(top){ const m=profitBySid();
+  const arr=Object.entries(m).filter(([id])=>id!=='BOT').map(([id,p])=>({name:nameOf(id),p})).sort((a,b)=>b.p-a.p).slice(0,top||5);
+  const medal=['🥇','🥈','🥉','4','5','6','7','8'];
+  return arr.map((x,i)=>`<div class="resp" style="display:flex;justify-content:space-between;margin:4px 0"><span><b>${medal[i]||(i+1)}</b> ${esc(x.name)}</span><b style="color:var(--brand2)">${won(x.p)}</b></div>`).join('')||'<p class="muted" style="text-align:center;font-size:13px">아직 거래가 없어요</p>'; }
+let mktInterval=null;
+function ensureMktClock(){ if(mktInterval) return; mktInterval=setInterval(updateMktClock,1000); updateMktClock(); }
+function updateMktClock(){
+  const el=document.getElementById('mktTimer');
+  if(!el){ if(mktInterval){ clearInterval(mktInterval); mktInterval=null; } return; }
+  const endsAt=(liveData.market||{}).roundEndsAt, nud=document.getElementById('mktNudge');
+  if(!endsAt){ el.textContent='⏱ 대기'; el.style.color='var(--sub)'; if(nud)nud.textContent=''; return; }
+  const rem=Math.ceil((endsAt-Date.now())/1000);
+  if(rem>0){ el.textContent='⏱ '+rem+'초'; el.style.color=rem<=10?'var(--bad)':'var(--ink)';
+    if(nud) nud.textContent = rem<=10 ? '⚡ 곧 마감! 값을 조금 양보해서라도 거래해볼까?' : ''; }
+  else { el.textContent='⏱ 마감!'; el.style.color='var(--bad)'; if(nud) nud.textContent='⏰ 이번 라운드 종료 — 다음 라운드를 기다려요'; }
 }
 
 /* ---------------- 모의 시장 (학생: 호가/거래) ---------------- */
@@ -349,6 +370,7 @@ function curRound(){ return (liveData.market||{}).round||1; }
 function amMatched(){ return ((liveData.market||{}).matched||{})[sid]===curRound(); }
 function submitOffer(){
   const c=myCard(); if(!c) return;
+  if(roundExpired()){ toast('⏰ 라운드가 끝났어요. 다음 라운드를 기다려요'); return; }
   let v=parseInt(($('#offer').value||'').replace(/[^0-9]/g,''),10);
   if(!v){ toast('희망 가격을 입력하세요'); return; }
   v=Math.round(v/MKT_UNIT)*MKT_UNIT;
@@ -357,10 +379,12 @@ function submitOffer(){
   toast('호가 등록: '+won(v));
 }
 function requestTrade(ownerId, price){
+  if(roundExpired()){ toast('⏰ 라운드가 끝났어요. 다음 라운드를 기다려요'); return; }
   roomRef.child('market/requests/'+ownerId+'/'+sid).set({price, round:curRound(), name:sname});
   toast('거래 요청을 보냈어요! 상대가 수락하면 성사돼요');
 }
 function acceptRequest(fromId, price){
+  if(roundExpired()){ toast('⏰ 라운드가 끝났어요. 다음 라운드를 기다려요'); return; }
   const cards=(liveData.market||{}).cards||{}; const r=curRound();
   const myC=cards[sid], theirC=cards[fromId]; if(!myC||!theirC){ toast('상대 정보를 찾을 수 없어요'); return; }
   let buyerId, sellerId; if(myC.role==='buyer'){ buyerId=sid; sellerId=fromId; } else { buyerId=fromId; sellerId=sid; }
@@ -388,6 +412,8 @@ function renderCurrent(){
     iqMounted=false;
   }
   if(role==='teacher') renderTeacher(sc,idx); else renderStudent(sc,idx);
+  if(sc.t==='market_trade') ensureMktClock();
+  else if(mktInterval){ clearInterval(mktInterval); mktInterval=null; }
 }
 function progressBar(idx){ const pct=Math.round(idx/(SCREENS.length-1)*100);
   return `<div class="stepbar"><span class="pill">방 ${pin}</span><div class="prog"><i style="width:${pct}%"></i></div><span class="muted" style="font-size:13px">${idx+1}/${SCREENS.length}</span></div>`; }
@@ -455,7 +481,7 @@ function renderTeacher(sc, idx){
       ${nCards? `<p style="text-align:center" class="pill">배부 완료 · 구매자 ${nb} · 판매자 ${ns}</p><p class="muted" style="text-align:center">학생 화면에 카드가 떴어요. <b>다음 →</b> 으로 거래 시작.</p>`
       : `<p class="muted" style="text-align:center">현재 참여 ${nStudents}명. 아래 버튼으로 역할·카드를 나눠주세요. (홀수면 도우미 자동 추가)</p>`}`;
     extra=`<button class="btn btn-dark" onclick="assignMarketCards()">🎲 ${nCards?'다시 배분':'역할·카드 나눠주기'}</button>`;
-  } else if(sc.t==='market_trade'){ body=marketTradeTeacher(); extra=`<button class="btn btn-ok" onclick="nextRound()">⏭ 다음 라운드</button>`;
+  } else if(sc.t==='market_trade'){ body=marketTradeTeacher(); extra=`<button class="btn btn-dark" onclick="startRoundTimer()">⏱ ${ROUND_SECONDS}초 시작</button><button class="btn btn-ok" onclick="nextRound()">⏭ 다음 라운드</button>`;
   } else if(sc.t==='market_result'){ body=marketResultTeacher();
   } else if(sc.t==='eq_written'){ body=eqWrittenTeacher(!!shownAns['eq_written']);
     extra=`<button class="btn btn-dark" onclick="revealAns('eq_written')">${shownAns['eq_written']?'🙈 정답 숨기기':'🔑 정답 공개'}</button>`;
@@ -512,14 +538,15 @@ function marketTradeTeacher(){
   Object.entries(book).forEach(([id,o])=>{ if(o.round!==r) return; if(matched[id]===r) return;
     (cards[id]&&cards[id].role==='buyer'?buyers:sellers).push({id,...o}); });
   const col=(arr,cls)=>arr.map(o=>`<div class="offer ${cls}"><span class="op">${won(o.price)}</span><span class="om">${esc(o.name||nameOf(o.id))}${o.msg?' · '+esc(o.msg):''}</span></div>`).join('')||'<p class="muted" style="font-size:14px">아직 없어요</p>';
-  return `<h2 style="text-align:center">🤝 ${r}라운드 거래 중… (${r}/${MAX_ROUND})</h2>
-    <p class="muted" style="text-align:center">학생들이 호가를 올리고 서로 거래를 수락해요. 선생님은 진행만 하면 돼요.</p>
+  return `<h2 style="text-align:center">🤝 ${r}라운드 (${r}/${MAX_ROUND}) · <span id="mktTimer" style="font-family:'Black Han Sans',sans-serif">⏱ 대기</span></h2>
+    <p class="muted" style="text-align:center">호가를 올린 뒤 서로 수락하면 거래 성사! <b>⏱ ${ROUND_SECONDS}초 시작</b>으로 라운드를 시작하세요.</p>
     <div class="tally"><div class="tbox t-yes"><div class="n">${thisRound}</div><div class="l">이번 라운드 거래</div></div>
       <div class="tbox t-wait"><div class="n">${deals.length}</div><div class="l">누적 거래</div></div>
       <div class="tbox t-no"><div class="n">${total}</div><div class="l">전체 인원</div></div></div>
     <div class="grid2"><div class="book"><b style="color:var(--demand)">🛒 구매자 호가</b>${col(buyers,'buy')}</div>
       <div class="book"><b style="color:var(--supply)">🏪 판매자 호가</b>${col(sellers,'sell')}</div></div>
-    <p class="muted" style="text-align:center;font-size:14px">라운드를 넘기려면 <b>다음 라운드</b>, 결과를 보려면 <b>다음 →</b></p>`;
+    <div class="card" style="box-shadow:none;margin-top:10px"><b>🏆 누적 이익 순위</b>${leaderboardHtml(5)}</div>
+    <p class="muted" style="text-align:center;font-size:14px">라운드를 넘기려면 <b>⏭ 다음 라운드</b>, 결과를 보려면 <b>다음 →</b></p>`;
 }
 function marketResultTeacher(){
   const deals=dealsArr();
@@ -536,7 +563,8 @@ function marketResultTeacher(){
     <div class="hist">${bars}</div>
     <div class="grid2" style="margin-top:8px"><div class="sentence" style="text-align:center;background:#e7f6ec;color:#166534;font-size:20px">시장(균형) 가격<br><b>${modal.map(won).join(' ~ ')}</b></div>
       <div class="sentence" style="text-align:center;font-size:20px">총 거래량<br><b>${deals.length}건</b></div></div>
-    <p style="text-align:center" class="pill">🏆 최고 이익: ${esc(best.name)} (${best.role} · ${won(best.profit)} 이익)</p>`;
+    <p style="text-align:center" class="pill">🏆 최고 이익: ${esc(best.name)} (${best.role} · ${won(best.profit)} 이익)</p>
+    <div class="card" style="box-shadow:none;margin-top:10px"><b>🏆 누적 이익 순위</b>${leaderboardHtml(8)}</div>`;
 }
 
 /* --------- 학생 --------- */
@@ -629,6 +657,8 @@ function studentMarketTrade(){
   const reqs=Object.entries((m.requests||{})[sid]||{}).filter(([fid,q])=>q.round===r&&matched[fid]!==r)
     .map(([fid,q])=>`<div class="req"><span class="grow">🔔 <b>${esc(q.name||nameOf(fid))}</b> 님이 <b>${won(q.price)}</b>에 거래 요청</span><button class="btn btn-sm btn-ok" onclick="acceptRequest('${fid}',${q.price})">수락</button></div>`).join('');
   return studentCard('')+`
+    <div style="text-align:center;margin:4px 0"><span id="mktTimer" style="font-weight:900;font-size:22px">⏱ 대기</span></div>
+    <div id="mktNudge" style="text-align:center;color:var(--bad);font-weight:800;font-size:14px;min-height:18px"></div>
     <div class="grid2" style="margin-top:6px">
       <div><label>${buy?'사고 싶은 가격 (희망 구매가)':'팔고 싶은 가격 (희망 판매가)'}</label>
         <input id="offer" inputmode="numeric" placeholder="1,000원 단위" value="${myValid?myOffer.price:''}" style="text-align:center;font-size:22px"></div>
