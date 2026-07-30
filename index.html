@@ -207,6 +207,7 @@ const SCREENS = [
   {t:'price_explain'},    // 설명: 수요·공급이 만나는 점에서 결정
   {t:'eq_written'},       // 7. 균형 서술형
   {t:'standards2'},       // 성취기준 재언급 (다음 미션 브리지)
+  {t:'shift_intro'},      // 개념 설명: 가격변동(수요량 변화) vs 가격외 요인(수요·공급 자체 변화)
   {t:'inquiry'},          // 8·9. 시장 가격 탐구소 (변동 예측·대응, 자기 속도)
   {t:'summarize_build'},  // 11. 문장 완성 (조각 채우기)
   {t:'end'}
@@ -243,14 +244,11 @@ function subscribeAll(){
 
 /* ---------------- 랜딩/설정 ---------------- */
 function renderLanding(){
-  const configured=isConfigured(getConfig());
-  app.innerHTML=`<div class="center wrap"><div class="card" style="max-width:460px;width:100%;text-align:center">
+  app.innerHTML=`<div class="center wrap"><div class="card" style="max-width:480px;width:100%;text-align:center">
     <div class="logo">🍗</div><h1>치킨 시장</h1><p class="muted">수요와 공급의 원리를 직접 만들어 봐요</p>
-    ${configured?'':`<div class="warn" style="text-align:left;margin:14px 0">⚠ Firebase 설정이 필요해요. <b>설정</b>에서 넣어주세요.</div>`}
-    <div style="height:10px"></div>
+    <div class="std" style="text-align:left;font-size:13px;margin:14px 0;line-height:1.7">📚 <b>오늘의 성취기준 (2022 개정)</b><br>· [9사(일사)09-02] 수요 법칙과 공급 법칙을 도출하고, 시장 가격이 결정되는 원리를 설명한다.<br>· [9사(일사)09-03] 수요·공급을 변화시키는 요인을 조사하고, 시장 가격의 변동에 대응하는 방안을 계획한다.</div>
     <button class="btn btn-brand btn-big" onclick="chooseRole('teacher')">👩‍🏫 선생님으로 시작</button><div style="height:12px"></div>
-    <button class="btn btn-ghost btn-big" onclick="chooseRole('student')">🙋 학생으로 참여</button><div style="height:16px"></div>
-    <button class="btn btn-ghost" style="font-size:14px;padding:10px 16px" onclick="renderConfig()">⚙️ 설정 (Firebase · 구글시트)</button>
+    <button class="btn btn-ghost btn-big" onclick="chooseRole('student')">🙋 학생으로 참여</button>
   </div></div>`;
 }
 function renderConfig(){
@@ -396,6 +394,16 @@ function progressBar(idx){ const pct=Math.round(idx/(SCREENS.length-1)*100);
 function teacherNav(extra){ return `<div class="nav">${extra||''}<button class="btn btn-ghost" onclick="teacherGo(-1)">← 이전</button><button class="btn btn-brand grow" onclick="teacherGo(1)">다음 →</button></div>`; }
 function look(emoji,txt){ return `<div class="look"><span class="emoji">${emoji}</span>${txt}</div>`; }
 function introBlock(title,desc,kind){ const c=kind==='demand'?'var(--demand)':'var(--supply)'; return `<div style="text-align:center;padding:14px"><h1 style="color:${c}">${title}</h1><p style="font-size:22px;margin-top:16px">${desc}</p><p class="muted" style="margin-top:20px">준비됐으면 <b>다음 →</b></p></div>`; }
+function shiftIntroBody(){
+  return `<h2 style="text-align:center">🔀 잠깐! 이제부터 달라져요</h2>
+    <div class="std">지금까지는 🍗 <b>값이 오르내리면</b> → 사려는 양(수요량)이 늘거나 줄었어요. <span class="muted">(가격표만 왔다 갔다 한 거예요)</span></div>
+    <div class="std" style="border-left-color:var(--brand)">이제부터는 <b>값이 아니라 다른 이유</b> 때문에, 사려는 마음·파는 양이 <b>통째로</b> 바뀌어요!</div>
+    <div class="grid2">
+      <div class="card" style="box-shadow:none"><b>🔥 예시 1</b><br>치킨이 갑자기 유행하면?<br>값이 그대로여도 <b style="color:var(--demand)">사려는 사람이 확 늘어요</b><br>→ 수요 자체가 커짐!</div>
+      <div class="card" style="box-shadow:none"><b>🌧️ 예시 2</b><br>닭·기름값(재료값)이 오르면?<br><b style="color:var(--supply)">팔려는 가게가 줄어요</b><br>→ 공급 자체가 작아짐!</div>
+    </div>
+    <p class="muted" style="text-align:center;margin-top:12px">그래서 이번엔 "<b>값 말고 무엇이</b> 시장을 흔드는지" 탐정처럼 찾아볼 거예요 🕵️</p>`;
+}
 
 /* --------- 교사 --------- */
 function renderTeacher(sc, idx){
@@ -456,13 +464,13 @@ function renderTeacher(sc, idx){
       <p class="muted" style="text-align:center">모의 시장으로 <b>가격이 어떻게 정해지는지</b> 배웠어요. 이제 다음 단계예요!</p>
       <div class="std">[9사(일사)09-03] 시장경제에서 <b>수요와 공급을 변화시키는 요인</b>을 조사하고, <b>시장 가격의 변동에 대응</b>하는 방안을 계획한다.</div>
       <p class="muted" style="text-align:center;margin-top:12px">🕵️ 다음 화면 <b>시장 가격 탐구소</b>에서 가설을 세우고, 가격이 왜 변하는지 탐정처럼 조사해봐요!</p>`;
+  } else if(sc.t==='shift_intro'){ body=shiftIntroBody();
   } else if(sc.t==='inquiry'){ body=inquiryTeacher();
   } else if(sc.t==='summarize_build'){ body=`<h2 style="text-align:center">✏️ 11단계. 문장 완성으로 정리</h2><p class="muted" style="text-align:center">학생들이 조각을 채워 오늘 배운 문장을 완성해요.</p>${textList('summaryBuild')}`;
   } else if(sc.t==='end'){
-    const url=getSheetUrl();
     body=`<div style="text-align:center;padding:14px"><div class="logo">🎉</div><h2>오늘 수업 끝!</h2><p class="muted">수요·공급 법칙부터 모의 시장 균형 가격까지, 우리 손으로 만들었어요.</p>
-      <p class="muted" style="font-size:14px;margin-top:10px">📥 <b>CSV로 저장</b>을 누르면 응답 파일이 내려받아져요.<br>구글 시트에서 <b>파일 → 가져오기</b>로 올리면 끝! (앱스크립트 필요 없음)</p></div>`;
-    extra=`<button class="btn btn-brand" onclick="exportCSV()">📥 CSV로 저장</button>`+(url?`<button class="btn btn-dark" onclick="exportToSheet()">📊 시트 자동전송</button>`:'');
+      <p class="muted" style="font-size:14px;margin-top:10px">🕵️ <b>경제 탐정(탐구소)</b> 응답은 학생이 입력할 때마다 <b>'경제탐정' 시트에 실시간 자동 기록</b>됩니다.<br>전체 활동을 파일로도 남기려면 아래 <b>CSV로 저장</b>을 누르세요.</p></div>`;
+    extra=`<button class="btn btn-brand" onclick="exportCSV()">📥 전체 CSV 저장 (선택)</button>`;
   }
   app.innerHTML=`<div class="wrap"><div class="card">${progressBar(idx)}${body}${teacherNav(extra)}</div></div>`;
   drawChartIfNeeded(sc);
@@ -551,6 +559,7 @@ function renderStudent(sc, idx){
   else if(sc.t==='demand_curve'||sc.t==='supply_curve'){ body=look('👀','선생님 화면(칠판)을 봐주세요!<br>우리 반 곡선이 그려지고 있어요.'); }
   else if(sc.t==='price_explain'){ body=look('⚖️','칠판을 봐주세요!<br>수요·공급 곡선이 만나는 곳에서 가격이 정해져요.'); }
   else if(sc.t==='standards2'){ body=look('📚','가격이 왜 변할까? 🕵️<br>이제 탐정이 되어 조사해봐요!'); }
+  else if(sc.t==='shift_intro'){ body=shiftIntroBody(); }
   else if(sc.t==='demand_written'||sc.t==='supply_written'){
     const kind=sc.t==='demand_written'?'demand':'supply'; const node=kind==='demand'?'demandWritten':'supplyWritten';
     const mine=(respNode(node))[sid]; const target=kind==='demand'?'수요량':'공급량';
@@ -770,6 +779,19 @@ const IQ_FACTORS=[
 let IQ, iqSel, iqRole, iqSyncT;
 function iqDefault(){ return {team:'',product:'',hVar:'수요',hDir:'늘어나면',hPrice:'오를',hWhy:'',sel:[],newsMemo:'',dV:0,sV:0,predict:'',vMatch:'match',vConcl:'',plan:{소비자:'',생산자:'',정부:''},done:false}; }
 function iqHypoStr(){ const par=IQ.hVar==='수요'?'가':'이'; return `${IQ.hVar}${par} ${IQ.hDir} 가격은 ${IQ.hPrice} 것이다`; }
+/* 경제 탐정(탐구소) 내용만 한 줄로 → 실시간 시트 기록 (학생별 1행 갱신) */
+function iqSheetRow(){
+  const facs=(IQ.sel||[...iqSel]).map(id=>{ const f=IQ_FACTORS.find(x=>x.id===id); return f?f.name:id; }).join(', ');
+  const pred='수요 '+(IQ.dV>0?'증가':IQ.dV<0?'감소':'그대로')+' / 공급 '+(IQ.sV>0?'증가':IQ.sV<0?'감소':'그대로');
+  const verify=(IQ.vMatch||'')+(IQ.vConcl?' · '+IQ.vConcl:'');
+  return [sname||'', IQ.product||'', iqHypoStr(), facs, IQ.newsMemo||'', pred, verify,
+    (IQ.plan&&IQ.plan.소비자)||'', (IQ.plan&&IQ.plan.생산자)||'', (IQ.plan&&IQ.plan.정부)||'', IQ.done?'제출완료':'작성중'];
+}
+function iqSendSheet(){
+  const url=getSheetUrl(); if(!url) return;
+  fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({type:'inquiry', key:sid, pin:pin, when:new Date().toLocaleString('ko-KR'), row:iqSheetRow()})}).catch(()=>{});
+}
 function iqSync(){ clearTimeout(iqSyncT); iqSyncT=setTimeout(()=>{
   IQ.sel=[...iqSel];
   roomRef.child('text/inquiry/'+sid).set({name:sname, team:IQ.team, product:IQ.product, hypo:iqHypoStr(),
@@ -922,7 +944,7 @@ function iqUpdateGraph(){
   const shift=25, dV=IQ.dV, sV=IQ.sV, $=id=>document.getElementById(id);
   const dL={x1:40+dV*shift,y1:40-dV*shift,x2:180+dV*shift,y2:180-dV*shift};
   const sL={x1:40+sV*shift,y1:180+sV*shift,x2:180+sV*shift,y2:40+sV*shift};
-  const eqX=110+(dV+sV)*(shift/2), eqY=110+(sV-dV)*(shift/2);
+  const eqX=110+(dV+sV)*shift, eqY=110+(sV-dV)*shift;  // 두 직선(기울기 ±1)의 실제 교점
   $('gLineD').setAttribute('x1',dL.x1);$('gLineD').setAttribute('y1',dL.y1);$('gLineD').setAttribute('x2',dL.x2);$('gLineD').setAttribute('y2',dL.y2);
   $('gTextD').setAttribute('x',dL.x2+5);$('gTextD').setAttribute('y',dL.y2+5);
   $('gLineS').setAttribute('x1',sL.x1);$('gLineS').setAttribute('y1',sL.y1);$('gLineS').setAttribute('x2',sL.x2);$('gLineS').setAttribute('y2',sL.y2);
@@ -952,8 +974,8 @@ function iqUpdateGraph(){
 }
 const IQ_V={match:['match','🎉 예상이 맞았어요! 왜 맞았는지 근거를 정리해요.'],diff:['diff','😮 달랐네요. 무엇을 빠뜨렸는지 다시 생각해요. 훌륭한 탐구 자세!'],part:['diff','🤏 반만 맞았어요. 맞은 것과 틀린 것을 나눠 적어요.']};
 function iqUpdV(){ const b=document.getElementById('iq_vBox'); if(!b) return; const v=IQ_V[IQ.vMatch]||IQ_V.match; b.innerHTML=`<div class="verdict ${v[0]}">${v[1]}</div>`; }
-function iqSubmit(){ IQ.plan[iqRole]=document.getElementById('iq_plan').value; IQ.done=true; iqSync();
-  const m=document.getElementById('iq_msg'); m.textContent='제출 완료! 선생님 화면에 반영돼요 ✔'; setTimeout(()=>{if(m)m.textContent='';},2500); }
+function iqSubmit(){ IQ.plan[iqRole]=document.getElementById('iq_plan').value; IQ.done=true; IQ.sel=[...iqSel]; iqSync(); iqSendSheet();  // 최종 제출 시에만 시트 기록
+  const m=document.getElementById('iq_msg'); m.textContent='제출 완료! 시트에 기록됐어요 ✔'; setTimeout(()=>{if(m)m.textContent='';},2500); }
 function iqShow(id){ iqPick=id; renderCurrent(); }
 function iqClose(){ iqPick=null; renderCurrent(); }
 function iqArrow(v){ return v>0?'↑':v<0?'↓':'–'; }
