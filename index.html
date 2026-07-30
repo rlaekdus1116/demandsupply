@@ -163,6 +163,7 @@
 <div id="app"></div>
 <div id="tag" class="cardtag hidden"></div>
 <div id="toast" class="toast hidden"></div>
+<button id="bgmBtn" onclick="bgmToggle()" style="position:fixed;left:12px;bottom:12px;z-index:60;background:#fff;border:2px solid #16340f;border-radius:999px;padding:8px 14px;font-weight:800;font-family:'Jua',sans-serif;cursor:pointer;box-shadow:2px 2px 0 rgba(22,52,15,.2)">🎵 음악</button>
 
 <script>
 /* =========================================================================
@@ -187,7 +188,7 @@ const BUYER_POOL  = [9000, 10000, 11000, 12000, 13000];  // 구매자 만족 가
 const SELLER_POOL = [4000, 5000, 6000, 7000, 8000];      // 판매자 원가
 const MKT_UNIT = 1000;
 const MAX_ROUND = 3;
-const ROUND_SECONDS = 60;   // 라운드당 제한시간
+const ROUND_SECONDS = 90;   // 라운드당 제한시간
 
 const SCREENS = [
   {t:'lobby'},
@@ -228,7 +229,7 @@ const $ = s => document.querySelector(s);
 const app = $('#app');
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.add('hidden'),1700); }
 function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function nameOf(id){ if(id==='BOT') return '🤖 도우미'; return ((liveData.students||{})[id]||{}).name || '학생'; }
+function nameOf(id){ if(id==='TEACHER') return '👩‍🏫 선생님'; return ((liveData.students||{})[id]||{}).name || '학생'; }
 
 function getConfig(){ const s=localStorage.getItem('cm_fbconfig'); if(s){try{return JSON.parse(s);}catch(e){}} return FIREBASE_CONFIG; }
 function getSheetUrl(){ return localStorage.getItem('cm_sheeturl') || SHEET_URL; }
@@ -239,7 +240,10 @@ function subscribeAll(){
   roomRef.child('screenIndex').on('value', s=>{ liveData.screenIndex=s.val()||0; renderCurrent(); });
   roomRef.child('students').on('value', s=>{ liveData.students=s.val()||{}; renderCurrent(); });
   roomRef.child('responses').on('value', s=>{ liveData.responses=s.val()||{}; renderCurrent(); });
-  roomRef.child('market').on('value', s=>{ liveData.market=s.val()||{}; renderCurrent(); });
+  roomRef.child('market').on('value', s=>{ liveData.market=s.val()||{};
+    const dc=Object.keys((liveData.market.deals)||{}).length;
+    if(role==='teacher' && prevDealCount>=0 && dc>prevDealCount) speak('체결되었습니다');
+    prevDealCount=dc; renderCurrent(); });
   roomRef.child('text').on('value', s=>{ liveData.text=s.val()||{}; renderCurrent(); });
 }
 
@@ -329,12 +333,13 @@ function assignMarketCards(){
   const ids=Object.keys(liveData.students||{});
   if(ids.length<2){ toast('학생이 2명 이상 필요해요'); return; }
   const players=ids.slice();
-  if(players.length%2===1) players.push('BOT');
+  const odd = players.length%2===1;
+  if(odd) players.push('TEACHER');   // 홀수면 선생님이 참여해 짝을 맞춤
   for(let i=players.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [players[i],players[j]]=[players[j],players[i]]; }
   const half=players.length/2, cards={};
   players.forEach((id,idx)=>{ cards[id]= idx<half?{role:'buyer',value:pick(BUYER_POOL)}:{role:'seller',value:pick(SELLER_POOL)}; });
   roomRef.child('market').set({cards, round:1});   // book/matched/requests/deals 초기화
-  toast('역할을 임의로 나눴어요! 구매자 '+half+' · 판매자 '+half);
+  toast('역할 배분 완료! 구매자 '+half+' · 판매자 '+half+(odd?' (홀수라 선생님도 참여!)':''));
 }
 function nextRound(){
   const m=liveData.market||{}; const cur=m.round||1;
@@ -348,7 +353,7 @@ function startRoundTimer(){ if(!(liveData.market||{}).cards){ toast('먼저 카�
 function roundExpired(){ const e=(liveData.market||{}).roundEndsAt; return !!(e && Date.now()>e); }
 function profitBySid(){ const m={}; dealsArr().forEach(d=>{ m[d.buyerId]=(m[d.buyerId]||0)+d.bProfit; m[d.sellerId]=(m[d.sellerId]||0)+d.sProfit; }); return m; }
 function leaderboardHtml(top){ const m=profitBySid();
-  const arr=Object.entries(m).filter(([id])=>id!=='BOT').map(([id,p])=>({name:nameOf(id),p})).sort((a,b)=>b.p-a.p).slice(0,top||5);
+  const arr=Object.entries(m).filter(([id])=>id!=='TEACHER').map(([id,p])=>({name:nameOf(id),p})).sort((a,b)=>b.p-a.p).slice(0,top||5);
   const medal=['🥇','🥈','🥉','4','5','6','7','8'];
   return arr.map((x,i)=>`<div class="resp" style="display:flex;justify-content:space-between;margin:4px 0"><span><b>${medal[i]||(i+1)}</b> ${esc(x.name)}</span><b style="color:var(--brand2)">${won(x.p)}</b></div>`).join('')||'<p class="muted" style="text-align:center;font-size:13px">아직 거래가 없어요</p>'; }
 let mktInterval=null;
@@ -402,6 +407,61 @@ function acceptRequest(fromId, price){
   });
 }
 function dealsArr(){ return Object.values((liveData.market||{}).deals||{}); }
+
+/* 홀수일 때 선생님도 플레이어로 참여 (교사 화면에서 호가·수락) */
+function teacherOffer(){
+  if(roundExpired()){ toast('⏰ 라운드가 끝났어요'); return; }
+  const c=((liveData.market||{}).cards||{})['TEACHER']; if(!c){ toast('선생님 참여 카드가 없어요'); return; }
+  let v=parseInt((document.getElementById('t_offer').value||'').replace(/[^0-9]/g,''),10);
+  if(!v){ toast('희망 가격을 입력하세요'); return; } v=Math.round(v/MKT_UNIT)*MKT_UNIT;
+  const msg=(document.getElementById('t_appeal').value||'').slice(0,40);
+  roomRef.child('market/book/TEACHER').set({price:v, msg, round:curRound(), name:'👩‍🏫 선생님', role:c.role});
+  toast('선생님 호가 등록: '+won(v));
+}
+function teacherRequest(ownerId, price){
+  if(roundExpired()){ toast('⏰ 라운드가 끝났어요'); return; }
+  roomRef.child('market/requests/'+ownerId+'/TEACHER').set({price, round:curRound(), name:'👩‍🏫 선생님'});
+  toast('거래 요청을 보냈어요!');
+}
+function teacherAccept(fromId, price){
+  if(roundExpired()){ toast('⏰ 라운드가 끝났어요'); return; }
+  const cards=(liveData.market||{}).cards||{}; const r=curRound();
+  const myC=cards['TEACHER'], theirC=cards[fromId]; if(!myC||!theirC){ toast('상대 정보를 찾을 수 없어요'); return; }
+  let buyerId, sellerId; if(myC.role==='buyer'){ buyerId='TEACHER'; sellerId=fromId; } else { buyerId=fromId; sellerId='TEACHER'; }
+  const value=cards[buyerId].value, cost=cards[sellerId].value;
+  roomRef.child('market/matched/TEACHER').transaction(cur=> cur===r?undefined:r, (err,committed)=>{
+    if(err||!committed){ toast('이미 거래했어요'); return; }
+    roomRef.child('market/matched/'+fromId).set(r);
+    roomRef.child('market/deals').push({round:r, price, buyerId, sellerId, value, cost, bProfit:value-price, sProfit:price-cost, ts:Date.now()});
+    roomRef.child('market/requests/TEACHER').remove(); roomRef.child('market/requests/'+fromId).remove();
+    roomRef.child('market/book/TEACHER').remove(); roomRef.child('market/book/'+fromId).remove();
+    toast('🎉 거래 성사! '+won(price));
+  });
+}
+function teacherPlayPanel(){
+  const m=liveData.market||{}; const cards=m.cards||{}; const c=cards['TEACHER']; if(!c) return '';
+  const r=m.round||1, matched=m.matched||{};
+  if(matched['TEACHER']===r){
+    const d=dealsArr().find(x=>x.round===r&&(x.buyerId==='TEACHER'||x.sellerId==='TEACHER'));
+    return `<div class="card" style="box-shadow:none;border:3px solid var(--brand);margin-top:10px"><b>🙋 선생님 참여</b> · ✅ 이번 라운드 거래 완료 ${d?'('+won(d.price)+')':''}</div>`;
+  }
+  const buy=c.role==='buyer';
+  const myOffer=(m.book||{})['TEACHER']; const myValid=myOffer&&myOffer.round===r;
+  const opp=Object.entries(m.book||{}).filter(([id,o])=>o.round===r&&matched[id]!==r&&cards[id]&&cards[id].role!==c.role&&id!=='TEACHER').map(([id,o])=>({id,...o}));
+  const oppRows=opp.map(o=>{ const prof=buy?(c.value-o.price):(o.price-c.value);
+    return `<div class="offer ${buy?'sell':'buy'}"><span class="op">${won(o.price)}</span><span class="om">${esc(o.name||nameOf(o.id))} · 이익 ${won(prof)}</span><button class="btn btn-sm ${prof>=0?'btn-ok':'btn-ghost'}" onclick="teacherRequest('${o.id}',${o.price})">요청</button></div>`;
+  }).join('')||'<p class="muted" style="font-size:13px">상대 호가가 아직 없어요</p>';
+  const reqs=Object.entries((m.requests||{})['TEACHER']||{}).filter(([fid,q])=>q.round===r&&matched[fid]!==r)
+    .map(([fid,q])=>`<div class="req"><span class="grow">🔔 <b>${esc(q.name||nameOf(fid))}</b> · ${won(q.price)}</span><button class="btn btn-sm btn-ok" onclick="teacherAccept('${fid}',${q.price})">수락</button></div>`).join('');
+  return `<div class="card" style="box-shadow:none;border:3px solid var(--brand);margin-top:10px">
+    <b>🙋 선생님도 참여 중! (홀수라 짝 맞추기)</b>
+    <div class="gamecard ${buy?'gc-buy':'gc-sell'}" style="padding:12px;margin:8px 0"><div class="role">${buy?'🛒 구매자':'🏪 판매자'} · 내 ${buy?'가치':'원가'} <b>${won(c.value)}</b></div></div>
+    <div class="row"><input id="t_offer" inputmode="numeric" placeholder="희망가 (1,000원)" value="${myValid?myOffer.price:''}" style="flex:2"><button class="btn btn-brand" onclick="teacherOffer()">${myValid?'수정':'호가 올리기'}</button></div>
+    <input id="t_appeal" maxlength="40" placeholder="어필 메시지 (선택)" value="${myValid?esc(myOffer.msg||''):''}" style="margin-top:6px">
+    ${reqs?`<div style="margin-top:8px"><b>📨 나에게 온 요청</b>${reqs}</div>`:''}
+    <div style="margin-top:8px"><b>🧾 ${buy?'판매자':'구매자'} 호가 (요청 보내기)</b>${oppRows}</div>
+  </div>`;
+}
 
 /* ---------------- 렌더 ---------------- */
 let iqMounted=false;
@@ -477,7 +537,8 @@ function renderTeacher(sc, idx){
       <div class="std">규칙: 절반은 <b>구매자</b>, 절반은 <b>판매자</b>. 각자 카드를 받아요.
       <br>· 구매자: 카드의 <b>만족 가치</b>보다 <b>싸게</b> 사면 이익!  · 판매자: 카드의 <b>원가</b>보다 <b>비싸게</b> 팔면 이익!
       <br>· 각자 <b>희망 가격 + 어필 메시지</b>를 호가창에 올려요. 상대가 마음에 들면 <b>거래 요청</b> → <b>수락</b>하면 거래 성사!
-      <br>· 거래는 1,000원 단위, 총 <b>${MAX_ROUND}라운드</b> 반복. 카드 금액은 비밀!</div>
+      <br>· 거래는 1,000원 단위, 총 <b>${MAX_ROUND}라운드</b> 반복. 카드 금액은 비밀!
+      <br>· 💰 치킨은 보통 <b>약 4,000원 ~ 13,000원</b> 사이에서 거래돼요. (정확한 가격은 직접 찾아봐요!)</div>
       ${nCards? `<p style="text-align:center" class="pill">배부 완료 · 구매자 ${nb} · 판매자 ${ns}</p><p class="muted" style="text-align:center">학생 화면에 카드가 떴어요. <b>다음 →</b> 으로 거래 시작.</p>`
       : `<p class="muted" style="text-align:center">현재 참여 ${nStudents}명. 아래 버튼으로 역할·카드를 나눠주세요. (홀수면 도우미 자동 추가)</p>`}`;
     extra=`<button class="btn btn-dark" onclick="assignMarketCards()">🎲 ${nCards?'다시 배분':'역할·카드 나눠주기'}</button>`;
@@ -533,7 +594,7 @@ function textList(key){
 function marketTradeTeacher(){
   const m=liveData.market||{}; const cards=m.cards||{}; const book=m.book||{}; const matched=m.matched||{}; const r=m.round||1;
   const deals=dealsArr(); const thisRound=deals.filter(d=>d.round===r).length;
-  const total=Object.keys(cards).filter(id=>id!=='BOT').length;
+  const total=Object.keys(cards).filter(id=>id!=='TEACHER').length;
   const buyers=[], sellers=[];
   Object.entries(book).forEach(([id,o])=>{ if(o.round!==r) return; if(matched[id]===r) return;
     (cards[id]&&cards[id].role==='buyer'?buyers:sellers).push({id,...o}); });
@@ -545,6 +606,7 @@ function marketTradeTeacher(){
       <div class="tbox t-no"><div class="n">${total}</div><div class="l">전체 인원</div></div></div>
     <div class="grid2"><div class="book"><b style="color:var(--demand)">🛒 구매자 호가</b>${col(buyers,'buy')}</div>
       <div class="book"><b style="color:var(--supply)">🏪 판매자 호가</b>${col(sellers,'sell')}</div></div>
+    ${teacherPlayPanel()}
     <div class="card" style="box-shadow:none;margin-top:10px"><b>🏆 누적 이익 순위</b>${leaderboardHtml(5)}</div>
     <p class="muted" style="text-align:center;font-size:14px">라운드를 넘기려면 <b>⏭ 다음 라운드</b>, 결과를 보려면 <b>다음 →</b></p>`;
 }
@@ -632,6 +694,7 @@ function studentCard(footer){
   return `<div class="gamecard ${buy?'gc-buy':'gc-sell'}"><div class="role">${buy?'🛒 나는 구매자 (수요자)':'🏪 나는 판매자 (공급자)'}</div>
       <div class="val">${won(c.value)}</div>
       <div class="hint">${buy?'이 치킨은 나에게 '+won(c.value)+'의 가치! 이보다 <b>싸게</b> 사면 이익.':'내 치킨 원가는 '+won(c.value)+'. 이보다 <b>비싸게</b> 팔면 이익.'}</div></div>
+    <p class="muted" style="text-align:center;font-size:13px">💰 보통 약 4,000~13,000원 · 1,000원 단위로 거래</p>
     <p class="muted" style="text-align:center;font-size:14px">🤫 내 카드 금액은 비밀! ${footer?'<br>'+footer:''}</p>`;
 }
 function studentMarketTrade(){
@@ -1068,6 +1131,28 @@ function inquiryTeacher(){
       <div class="card" style="box-shadow:none"><b>🧾 학생 목록 (눌러서 상세)</b><div class="resp-list">${list}</div></div></div>
     ${detail}`;
 }
+
+/* ---------------- 배경음악(BGM) + 음성(TTS) ---------------- */
+let prevDealCount=-1;
+let bgmCtx=null, bgmOn=false, bgmTimer=null, bgmStep=0;
+function bgmToggle(){
+  try{ if(!bgmCtx) bgmCtx=new (window.AudioContext||window.webkitAudioContext)(); if(bgmCtx.state==='suspended') bgmCtx.resume(); }catch(e){ return; }
+  const btn=document.getElementById('bgmBtn');
+  if(bgmOn){ bgmOn=false; clearInterval(bgmTimer); bgmTimer=null; if(btn)btn.textContent='🎵 음악'; return; }
+  bgmOn=true; if(btn)btn.textContent='🔇 끄기';
+  const mel=[523,659,784,659, 587,740,880,740, 523,659,784,1047, 880,784,659,587];
+  const bass=[131,131,165,165, 147,147,196,196];
+  const eighth=(60/132)/2; bgmStep=0;
+  bgmTimer=setInterval(()=>{ if(!bgmOn||!bgmCtx) return; const t=bgmCtx.currentTime+0.02;
+    bgmNote(mel[bgmStep%mel.length], t, 0.16, 0.05, 'triangle');
+    if(bgmStep%2===0) bgmNote(bass[(Math.floor(bgmStep/2))%bass.length], t, 0.32, 0.045, 'sine');
+    bgmStep++; }, eighth*1000);
+}
+function bgmNote(freq,t,dur,vol,type){ if(!bgmCtx) return;
+  const o=bgmCtx.createOscillator(), g=bgmCtx.createGain(); o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(bgmCtx.destination); o.start(t); o.stop(t+dur+0.05); }
+function speak(text){ try{ const u=new SpeechSynthesisUtterance(text); u.lang='ko-KR'; u.rate=1.05; u.pitch=1.1; speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){} }
 
 renderLanding();
 </script>
