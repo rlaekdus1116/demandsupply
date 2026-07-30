@@ -8,10 +8,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap');
   :root{
-    --bg:#fff7ed; --card:#ffffff; --ink:#1f2937; --sub:#6b7280;
-    --brand:#f97316; --brand2:#ea580c; --demand:#2563eb; --supply:#dc2626;
-    --ok:#16a34a; --bad:#dc2626; --line:#f1e3d3; --soft:#fff1e0;
+    --bg:#eef6e6; --card:#ffffff; --ink:#16340f; --sub:#5f7357;
+    --brand:#f5821f; --brand2:#e06a00; --demand:#2563eb; --supply:#dc2626;
+    --ok:#16a34a; --bad:#dc2626; --line:#dbe9cf; --soft:#fff3e2;
+    --green:#39a845; --green2:#2c8a37; --pink:#e8489a;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;padding:0}
@@ -123,6 +125,38 @@
   #iqRoot .roles{display:flex;gap:8px;margin-bottom:6px}
   #iqRoot .roles button{flex:1;border:2px solid var(--line);background:#fff;border-radius:12px;padding:12px 4px;font-size:14px;font-weight:800;cursor:pointer;color:var(--sub)}
   #iqRoot .roles button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  /* ===== 菜市场 마켓가이드 스타일 (디자인 전용 · 로직/구조 변경 없음) ===== */
+  body::before,body::after{content:"";position:fixed;left:0;right:0;height:16px;z-index:60;pointer-events:none;
+    background:conic-gradient(var(--green) 90deg,#fff 0 180deg,var(--green) 0 270deg,#fff 0) 0 0/16px 16px;}
+  body::before{top:0} body::after{bottom:0}
+  .wrap{padding-top:24px}
+  h1,h2{font-family:'Black Han Sans','Jua',sans-serif;letter-spacing:-.5px;color:var(--ink)}
+  h1{transform:rotate(-1.2deg);display:inline-block;text-shadow:3px 3px 0 rgba(57,168,69,.28)}
+  .logo{filter:drop-shadow(2px 3px 0 rgba(57,168,69,.35))}
+  .card{border:3px solid var(--ink);box-shadow:6px 6px 0 rgba(22,52,15,.14)}
+  .pill{background:var(--green);color:#fff;border:2px solid var(--ink);font-family:'Jua',sans-serif}
+  .btn{font-family:'Jua','Black Han Sans',sans-serif;border:3px solid var(--ink);box-shadow:3px 3px 0 rgba(22,52,15,.20)}
+  .btn:active{box-shadow:1px 1px 0 rgba(22,52,15,.20)}
+  .btn-brand{background:var(--brand);color:#fff}
+  .btn-ok{background:var(--green);color:#fff}
+  .btn-ghost{background:#fff;color:var(--green2)}
+  .btn-dark{background:var(--ink);color:#fff}
+  .btn-sm{border-width:2px;box-shadow:2px 2px 0 rgba(22,52,15,.18)}
+  .price-big{font-family:'Black Han Sans',sans-serif;text-shadow:2px 2px 0 rgba(57,168,69,.22)}
+  .pin{font-family:'Black Han Sans',sans-serif;background:#fff;border:3px dashed var(--green)}
+  .stepbar .prog{border:2px solid var(--ink)} .stepbar .prog>i{background:linear-gradient(90deg,var(--green),var(--brand))}
+  .chip{background:#fff;border:2px solid var(--green);color:var(--green2);font-weight:800}
+  .std{border-left:6px solid var(--green)}
+  .sentence{border:2px dashed var(--green)}
+  .tbox{border:2px solid var(--ink)}
+  .gamecard{border:3px solid var(--ink);box-shadow:5px 5px 0 rgba(22,52,15,.2)}
+  .hist .col .bar{background:var(--brand)} .hist .col.peak .bar{background:var(--green)}
+  .blank{border-color:var(--brand)}
+  #iqRoot .card{border:3px solid var(--ink);box-shadow:6px 6px 0 rgba(22,52,15,.14)}
+  #iqRoot .big{font-family:'Black Han Sans','Jua',sans-serif}
+  #iqRoot .btn{border:3px solid var(--ink);box-shadow:3px 3px 0 rgba(22,52,15,.20)}
+  #iqRoot .pick.on{border-color:var(--brand)}
 </style>
 </head>
 <body>
@@ -172,6 +206,7 @@ const SCREENS = [
   {t:'price_who2'},       // 데이터 보고 다시: 시장 가격은 누가?
   {t:'price_explain'},    // 설명: 수요·공급이 만나는 점에서 결정
   {t:'eq_written'},       // 7. 균형 서술형
+  {t:'standards2'},       // 성취기준 재언급 (다음 미션 브리지)
   {t:'inquiry'},          // 8·9. 시장 가격 탐구소 (변동 예측·대응, 자기 속도)
   {t:'summarize_build'},  // 11. 문장 완성 (조각 채우기)
   {t:'end'}
@@ -180,7 +215,7 @@ const SCREENS = [
 let db=null, role=null, pin=null, sid=null, sname=null;
 let roomRef=null, liveData={}, chart=null;
 let sbScreen=null, sbSlots=[], sbChips=[];   // 문장완성 상태
-let lastTeacherIdx=-1, shownLine={}, shownAns={};   // 교사: 곡선 잇기·정답 공개 토글
+let lastTeacherIdx=-1, shownLine={}, shownAns={}, iqPick=null;   // 교사: 곡선 잇기·정답 공개·탐구소 학생 상세
 function toggleLine(t){ shownLine[t]=!shownLine[t]; renderCurrent(); }
 function revealAns(t){ shownAns[t]=!shownAns[t]; renderCurrent(); }
 
@@ -364,7 +399,7 @@ function introBlock(title,desc,kind){ const c=kind==='demand'?'var(--demand)':'v
 
 /* --------- 교사 --------- */
 function renderTeacher(sc, idx){
-  if(idx!==lastTeacherIdx){ shownLine={}; shownAns={}; lastTeacherIdx=idx; }  // 화면 바뀌면 숨김 초기화
+  if(idx!==lastTeacherIdx){ shownLine={}; shownAns={}; iqPick=null; lastTeacherIdx=idx; }  // 화면 바뀌면 숨김 초기화
   const nStudents=Object.keys(liveData.students||{}).length; let body='', extra='';
   if(sc.t==='lobby'){
     const names=Object.values(liveData.students||{}).map(s=>s.name);
@@ -416,6 +451,11 @@ function renderTeacher(sc, idx){
   } else if(sc.t==='market_result'){ body=marketResultTeacher();
   } else if(sc.t==='eq_written'){ body=eqWrittenTeacher(!!shownAns['eq_written']);
     extra=`<button class="btn btn-dark" onclick="revealAns('eq_written')">${shownAns['eq_written']?'🙈 정답 숨기기':'🔑 정답 공개'}</button>`;
+  } else if(sc.t==='standards2'){
+    body=`<h2 style="text-align:center">📚 잠깐! 다음 미션의 성취기준</h2>
+      <p class="muted" style="text-align:center">모의 시장으로 <b>가격이 어떻게 정해지는지</b> 배웠어요. 이제 다음 단계예요!</p>
+      <div class="std">[9사(일사)09-03] 시장경제에서 <b>수요와 공급을 변화시키는 요인</b>을 조사하고, <b>시장 가격의 변동에 대응</b>하는 방안을 계획한다.</div>
+      <p class="muted" style="text-align:center;margin-top:12px">🕵️ 다음 화면 <b>시장 가격 탐구소</b>에서 가설을 세우고, 가격이 왜 변하는지 탐정처럼 조사해봐요!</p>`;
   } else if(sc.t==='inquiry'){ body=inquiryTeacher();
   } else if(sc.t==='summarize_build'){ body=`<h2 style="text-align:center">✏️ 11단계. 문장 완성으로 정리</h2><p class="muted" style="text-align:center">학생들이 조각을 채워 오늘 배운 문장을 완성해요.</p>${textList('summaryBuild')}`;
   } else if(sc.t==='end'){
@@ -510,6 +550,7 @@ function renderStudent(sc, idx){
   }
   else if(sc.t==='demand_curve'||sc.t==='supply_curve'){ body=look('👀','선생님 화면(칠판)을 봐주세요!<br>우리 반 곡선이 그려지고 있어요.'); }
   else if(sc.t==='price_explain'){ body=look('⚖️','칠판을 봐주세요!<br>수요·공급 곡선이 만나는 곳에서 가격이 정해져요.'); }
+  else if(sc.t==='standards2'){ body=look('📚','가격이 왜 변할까? 🕵️<br>이제 탐정이 되어 조사해봐요!'); }
   else if(sc.t==='demand_written'||sc.t==='supply_written'){
     const kind=sc.t==='demand_written'?'demand':'supply'; const node=kind==='demand'?'demandWritten':'supplyWritten';
     const mine=(respNode(node))[sid]; const target=kind==='demand'?'수요량':'공급량';
@@ -718,9 +759,19 @@ function iqMarkup(){
     <div class="iqtop"><div style="font-weight:900;color:var(--brand2)">🕵️ 시장 가격 탐구소 <span class="muted" style="font-size:13px;font-weight:700">· 8·9단계 (내 속도로!)</span></div>
       <div class="iqbar"><i id="iqbar" style="width:0%"></i></div><div class="iqstep" id="iqstep"></div></div>
 
-    <section class="panel show" data-step="0"><p class="big">🔎 가격은 왜 변할까? 탐구 시작!</p>
-      <div class="tip">가설을 세우고 → 뉴스로 단서를 모아 → 그래프로 예측·검증하고 → 대응까지 적어봐요. 버튼을 누르며 <b>내 속도로</b> 진행하세요.</div>
-      <button class="btn btn-brand btn-big" onclick="iqGo(1)">🚀 시작하기</button></section>
+    <section class="panel show" data-step="0" style="text-align:center">
+      <div style="font-size:52px">🕵️</div>
+      <p class="big" style="color:var(--brand2)">시장 가격 탐구소</p>
+      <p class="say">예비 경제 탐정님, 환영합니다!</p>
+      <div style="background:var(--soft);border:2px dashed var(--green);border-radius:16px;padding:18px;text-align:left;margin:16px 0;font-size:15px;line-height:1.9">
+        <b>📋 오늘의 미션</b><br>
+        ✅ <b>가설 세우기</b> — 물건 가격이 어떻게 변할지 추리해요<br>
+        ✅ <b>단서 수집</b> — 가상 뉴스에서 가격을 움직이는 '요인'을 찾아요<br>
+        ✅ <b>그래프 확인</b> — 그래프를 움직여 예상이 맞았는지 검증해요<br>
+        ✅ <b>대응 방안</b> — 소비자·생산자·정부는 어떻게 대처할지 적어요
+      </div>
+      <div class="tip">💡 버튼을 누르며 <b>내 속도로</b> 따라와 주세요!</div>
+      <button class="btn btn-brand btn-big" onclick="iqGo(1)">🚀 탐구 시작하기</button></section>
 
     <section class="panel" data-step="1"><p class="big">🤔 먼저 예상해 보기</p><p class="say">조사 전에 "이렇게 될 것 같다"를 정해요.</p>
       <div class="write"><div class="q">✏️ 우리 모둠/이름</div><input id="iq_team" placeholder="예: 2반 3모둠"></div>
@@ -869,20 +920,48 @@ const IQ_V={match:['match','🎉 예상이 맞았어요! 왜 맞았는지 근거
 function iqUpdV(){ const b=document.getElementById('iq_vBox'); if(!b) return; const v=IQ_V[IQ.vMatch]||IQ_V.match; b.innerHTML=`<div class="verdict ${v[0]}">${v[1]}</div>`; }
 function iqSubmit(){ IQ.plan[iqRole]=document.getElementById('iq_plan').value; IQ.done=true; iqSync();
   const m=document.getElementById('iq_msg'); m.textContent='제출 완료! 선생님 화면에 반영돼요 ✔'; setTimeout(()=>{if(m)m.textContent='';},2500); }
+function iqShow(id){ iqPick=id; renderCurrent(); }
+function iqClose(){ iqPick=null; renderCurrent(); }
+function iqArrow(v){ return v>0?'↑':v<0?'↓':'–'; }
+function iqDir(v){ return v>0?'증가':v<0?'감소':'그대로'; }
 function inquiryTeacher(){
-  const store=(liveData.text||{}).inquiry||{}; const arr=Object.values(store);
+  const store=(liveData.text||{}).inquiry||{}; const entries=Object.entries(store);
+  const arr=entries.map(([id,v])=>Object.assign({id},v));
   const done=arr.filter(a=>a.done).length;
+  const nameMap={}; IQ_FACTORS.forEach(f=>nameMap[f.id]=f.ic+' '+f.name);
   const tally={}; IQ_FACTORS.forEach(f=>tally[f.id]=0); arr.forEach(a=>(a.sel||[]).forEach(id=>{ if(id in tally)tally[id]++; }));
   const maxT=Math.max(1,...Object.values(tally));
   const facts=IQ_FACTORS.map(f=>`<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700"><span>${f.ic} ${f.name} <span class="muted" style="font-size:12px">(${f.g==='d'?'수요':'공급'})</span></span><span>${tally[f.id]}</span></div><div class="prog" style="height:10px;margin-top:2px"><i style="width:${Math.round(tally[f.id]/maxT*100)}%;background:${f.g==='d'?'#e11d48':'#0d9488'}"></i></div></div>`).join('');
-  const list=arr.map(a=>`<div class="resp"><b>${esc(a.name||'학생')}</b>${a.product?' · '+esc(a.product):''} · 예측: 수요 ${a.dV>0?'↑':a.dV<0?'↓':'-'} 공급 ${a.sV>0?'↑':a.sV<0?'↓':'-'}${a.done?' ✅':''}<br><span class="muted" style="font-size:13px">가설: ${esc(a.hypo||'')}</span></div>`).join('')||'<p class="muted" style="text-align:center">아직 없어요</p>';
+  const stepsOf=a=>[['가설',!!(a.product||a.hWhy)],['요인',(a.sel||[]).length>0],['뉴스',!!a.newsMemo],['예측',!!(a.predict||a.dV||a.sV)],['검증',!!a.vConcl],['대응',!!(a.plan&&(a.plan.소비자||a.plan.생산자||a.plan.정부))]];
+  const list=arr.map(a=>{ const done6=stepsOf(a).filter(s=>s[1]).length;
+    return `<div class="resp" style="cursor:pointer" onclick="iqShow('${a.id}')"><b>${esc(a.name||'학생')}</b>${a.product?' · '+esc(a.product):''} · 수요${iqArrow(a.dV)} 공급${iqArrow(a.sV)}${a.done?' ✅':''}<br><span class="muted" style="font-size:12px">${done6}/6 단계 진행 · 👆 눌러서 자세히 보기</span></div>`;
+  }).join('')||'<p class="muted" style="text-align:center">아직 없어요</p>';
+  // 선택 학생 상세
+  let detail='';
+  if(iqPick && store[iqPick]){ const q=store[iqPick];
+    const steps=stepsOf(q).map(s=>`<span class="chip" style="font-size:12px;padding:5px 10px;${s[1]?'':'opacity:.4'}">${s[1]?'✓':'○'} ${s[0]}</span>`).join(' ');
+    const planLine=r=>`<div class="resp" style="cursor:default"><b>${r}</b> · ${q.plan&&q.plan[r]?esc(q.plan[r]):'<span class="muted">미작성</span>'}</div>`;
+    detail=`<div class="card" style="box-shadow:none;border:3px solid var(--green);margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:18px">🔍 ${esc(q.name||'학생')} ${q.done?'<span class="pill" style="font-size:12px">제출완료</span>':'<span class="pill" style="font-size:12px;background:var(--sub)">진행중</span>'}</b>
+        <button class="btn btn-ghost btn-sm" onclick="iqClose()">닫기 ✕</button></div>
+      <div style="margin:8px 0">${steps}</div>
+      <div class="std"><b>상품</b> ${esc(q.product||'-')}</div>
+      <div class="std"><b>가설</b> ${esc(q.hypo||'-')}${q.hWhy?' <span class="muted">('+esc(q.hWhy)+')</span>':''}</div>
+      <div class="std"><b>고른 요인</b> ${(q.sel||[]).map(id=>nameMap[id]||id).join(', ')||'-'}</div>
+      <div class="std"><b>뉴스 메모</b> ${esc(q.newsMemo||'-')}</div>
+      <div class="std"><b>예측</b> 수요 ${iqDir(q.dV)} · 공급 ${iqDir(q.sV)}<br>${esc(q.predict||'-')}</div>
+      <div class="std"><b>검증</b> ${esc(q.vMatch||'-')} · ${esc(q.vConcl||'-')}</div>
+      <b>🧭 대응 전략</b>${planLine('소비자')}${planLine('생산자')}${planLine('정부')}
+    </div>`;
+  }
   return `<h2 style="text-align:center">🕵️ 8·9단계. 시장 가격 탐구소</h2>
-    <p class="muted" style="text-align:center">학생들이 각자 기기에서 6단계를 진행해요(변동 예측·대응). 선생님은 취합을 보며 안내하세요.</p>
+    <p class="muted" style="text-align:center">학생을 <b>눌러</b> 진행 위치와 대응 전략까지 볼 수 있어요.</p>
     <div class="tally"><div class="tbox t-yes"><div class="n">${done}</div><div class="l">제출 완료</div></div>
       <div class="tbox t-wait"><div class="n">${Math.max(0,arr.length-done)}</div><div class="l">진행 중</div></div>
       <div class="tbox t-no"><div class="n">${arr.length}</div><div class="l">참여</div></div></div>
     <div class="grid2"><div class="card" style="box-shadow:none"><b>🔎 많이 고른 요인</b>${facts}</div>
-      <div class="card" style="box-shadow:none"><b>🧾 학생 예측</b><div class="resp-list">${list}</div></div></div>`;
+      <div class="card" style="box-shadow:none"><b>🧾 학생 목록 (눌러서 상세)</b><div class="resp-list">${list}</div></div></div>
+    ${detail}`;
 }
 
 renderLanding();
