@@ -178,7 +178,7 @@ const FIREBASE_CONFIG = {
   appId: "1:475624406832:web:cef84e906a88aa574d12f5",
   measurementId: "G-5LCN6XJVX6"
 };
-const SHEET_URL = "";
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbwtAd0TjxyXfWLn0u5GbONU3bddBn-iKS8Wl9Hj3tg4KNcQ4peAfuDpoxMi19ujSZK9/exec";
 
 const PRICES = [5000, 15000, 30000, 50000, 70000];
 const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
@@ -461,8 +461,8 @@ function renderTeacher(sc, idx){
   } else if(sc.t==='end'){
     const url=getSheetUrl();
     body=`<div style="text-align:center;padding:14px"><div class="logo">🎉</div><h2>오늘 수업 끝!</h2><p class="muted">수요·공급 법칙부터 모의 시장 균형 가격까지, 우리 손으로 만들었어요.</p>
-      ${url?'<p class="muted">아래 버튼으로 모든 응답을 구글 시트로 보낼 수 있어요.</p>':'<p class="muted" style="font-size:13px">구글 시트로 내보내려면 설정에서 Apps Script URL을 넣으세요.</p>'}</div>`;
-    if(url) extra=`<button class="btn btn-dark" onclick="exportToSheet()">📊 구글 시트로 내보내기</button>`;
+      <p class="muted" style="font-size:14px;margin-top:10px">📥 <b>CSV로 저장</b>을 누르면 응답 파일이 내려받아져요.<br>구글 시트에서 <b>파일 → 가져오기</b>로 올리면 끝! (앱스크립트 필요 없음)</p></div>`;
+    extra=`<button class="btn btn-brand" onclick="exportCSV()">📥 CSV로 저장</button>`+(url?`<button class="btn btn-dark" onclick="exportToSheet()">📊 시트 자동전송</button>`:'');
   }
   app.innerHTML=`<div class="wrap"><div class="card">${progressBar(idx)}${body}${teacherNav(extra)}</div></div>`;
   drawChartIfNeeded(sc);
@@ -718,6 +718,40 @@ function exportToSheet(){
   fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({pin, when:new Date().toISOString(), rows})})
     .then(()=>toast('구글 시트로 보냈어요! ('+rows.length+'행) 시트를 확인하세요')).catch(()=>toast('전송 오류 — URL을 확인해보세요'));
   function target(dw){ return '수요량 '+dw.q; }
+}
+function collectRows(){
+  const students=liveData.students||{}, r=liveData.responses||{}, text=liveData.text||{}, market=liveData.market||{}; const rows=[];
+  Object.entries(students).forEach(([id,st])=>{ const nm=st.name;
+    PRICES.forEach(p=>{ const dv=((r.demand||{})[p]||{})[id]; if(dv!==undefined) rows.push([nm,'수요',won(p),dv?'산다':'안산다']); });
+    PRICES.forEach(p=>{ const sv=((r.supply||{})[p]||{})[id]; if(sv!==undefined) rows.push([nm,'공급',won(p),sv?'판다':'안판다']); });
+    const dw=(r.demandWritten||{})[id]; if(dw) rows.push([nm,'수요법칙서술','가격 '+dw.p,'수요량 '+dw.q]);
+    const sw=(r.supplyWritten||{})[id]; if(sw) rows.push([nm,'공급법칙서술','가격 '+sw.p,'공급량 '+sw.q]);
+    const ew=(r.eqWritten||{})[id]; if(ew) rows.push([nm,'균형서술',ew.a,ew.b]);
+    ['who','who2','summaryBuild'].forEach(k=>{ const tx=(text[k]||{})[id]; if(tx) rows.push([nm,k,'',tx.text]); });
+  });
+  Object.values((market.deals)||{}).forEach(t=>{
+    rows.push([nameOf(t.buyerId),'모의시장-구매('+t.round+'R)',won(t.price),'이익 '+won(t.bProfit)]);
+    rows.push([nameOf(t.sellerId),'모의시장-판매('+t.round+'R)',won(t.price),'이익 '+won(t.sProfit)]);
+  });
+  Object.values((text.inquiry)||{}).forEach(q=>{ const nm=q.name||'학생';
+    rows.push([nm,'탐구-가설','',q.hypo||'']); rows.push([nm,'탐구-상품·요인',q.product||'',(q.sel||[]).join(', ')]);
+    rows.push([nm,'탐구-뉴스메모','',q.newsMemo||'']);
+    rows.push([nm,'탐구-예측','수요 '+(q.dV>0?'증가':q.dV<0?'감소':'그대로')+' / 공급 '+(q.sV>0?'증가':q.sV<0?'감소':'그대로'),q.predict||'']);
+    rows.push([nm,'탐구-검증',q.vMatch||'',q.vConcl||'']);
+    ['소비자','생산자','정부'].forEach(rr=>{ if(q.plan&&q.plan[rr]) rows.push([nm,'탐구-대응('+rr+')','',q.plan[rr]]); });
+  });
+  return rows;
+}
+function exportCSV(){
+  const rows=collectRows(); if(!rows.length){ toast('아직 저장할 응답이 없어요'); return; }
+  const when=new Date().toLocaleString('ko-KR'); const q=s=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';
+  const lines=[['시간','PIN','이름','구분','항목','응답'].map(q).join(',')];
+  rows.forEach(r=>lines.push([when,pin,r[0],r[1],r[2],r[3]].map(q).join(',')));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const u=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=u; a.download='치킨시장_응답_방'+pin+'.csv'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{document.body.removeChild(a); URL.revokeObjectURL(u);},500);
+  toast('CSV를 내려받았어요! 구글 시트에 올리면 끝');
 }
 
 /* =======================================================================
