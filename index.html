@@ -806,7 +806,15 @@ const IQ_FACTORS=[
   {id:'tech',g:'s',ic:'⚙️',name:'기술 발전',newsTitle:'AI 로봇 공장 도입, 생산량 2배 껑충',newsSummary:'AI 자동화 로봇 도입으로 생산 속도가 빨라져, 시장에 공급되는 제품의 양이 크게 늘었습니다.'},
   {id:'firms',g:'s',ic:'🏭',name:'공급자 수',newsTitle:'너도나도 탕후루 가게 창업… 한 집 건너 한 집',newsSummary:'인기 메뉴를 파는 가게가 골목마다 생겨 소비자들이 더 쉽게 살 수 있게 되었습니다.'}
 ];
-let IQ, iqSel, iqRole, iqSyncT;
+/* 상품 ↔ 딱 맞는 뉴스 (1단계에서 고른 상품이 3단계 뉴스와 매칭) */
+const IQ_PRODUCTS=[
+  {name:'🥬 배추', title:'최악의 폭염에 밭이 쩍쩍… 금(金)배추 된 사연', summary:'연이은 폭염·가뭄으로 배추가 제대로 자라지 못해 시장에 나오는 양이 평년의 절반으로 뚝 떨어졌어요. → 배추 공급이 크게 줄었어요.'},
+  {name:'🍞 빵', title:'국제 밀값 30% 폭등… 동네 빵집 한숨', summary:'밀값이 폭등해 빵을 만드는 재료비가 확 올랐어요. 감당이 안 돼 빵 생산량을 줄이는 가게가 늘고 있어요. → 빵 공급이 줄어요.'},
+  {name:'🍗 치킨', title:'"이 집 치킨 미쳤다" SNS 대유행… 오픈런 행렬', summary:'한 치킨집이 SNS에서 대박이 나 너도나도 사려고 새벽부터 줄을 서요. → 치킨을 사려는 사람(수요)이 폭발적으로 늘었어요.'},
+  {name:'🚗 전기차', title:'휘발유값 폭등에 전기차 매장 북적', summary:'기름값이 계속 오르자 유지비를 아끼려 전기차로 눈을 돌리는 사람이 늘었어요. → 전기차를 사려는 수요가 급증했어요.'},
+  {name:'☕ 커피', title:'이상기후에 원두값 급등… 카페 비상', summary:'날씨 탓에 커피 원두 수확이 줄어 원두값이 급등했어요. 원가가 올라 커피를 파는 양이 줄어들 위기예요. → 커피 공급이 줄어요.'}
+];
+let IQ, iqSel, iqProd, iqRole, iqSyncT;
 function iqDefault(){ return {team:'',product:'',hVar:'수요',hDir:'늘어나면',hPrice:'오를',hWhy:'',sel:[],newsMemo:'',dV:0,sV:0,predict:'',vMatch:'match',vConcl:'',plan:{소비자:'',생산자:'',정부:''},done:false}; }
 function iqHypoStr(){ const par=IQ.hVar==='수요'?'가':'이'; return `${IQ.hVar}${par} ${IQ.hDir} 가격은 ${IQ.hPrice} 것이다`; }
 /* 경제 탐정(탐구소) 내용만 한 줄로 → 실시간 시트 기록 (학생별 1행 갱신) */
@@ -830,13 +838,14 @@ function iqSync(){ clearTimeout(iqSyncT); iqSyncT=setTimeout(()=>{
 },500); }
 
 function mountInquiry(){
-  IQ=iqDefault(); iqSel=new Set(); iqRole='소비자';
+  IQ=iqDefault(); iqSel=new Set(); iqProd=new Set(); iqRole='소비자';
   app.innerHTML=iqMarkup();
   roomRef.child('text/inquiry/'+sid).get().then(snap=>{
     if(snap.exists()){ const d=snap.val();
       IQ=Object.assign(iqDefault(), {team:d.team||'',product:d.product||'',hVar:d.hVar||'수요',hDir:d.hDir||'늘어나면',hPrice:d.hPrice||'오를',hWhy:d.hWhy||'',newsMemo:d.newsMemo||'',dV:d.dV||0,sV:d.sV||0,predict:d.predict||'',vMatch:d.vMatch||'match',vConcl:d.vConcl||'',plan:d.plan||{소비자:'',생산자:'',정부:''},done:!!d.done});
       iqSel=new Set(d.sel||[]);
     }
+    iqProd=new Set((IQ.product||'').split(', ').filter(Boolean));
     iqInit();
   }).catch(()=>iqInit());
 }
@@ -861,7 +870,9 @@ function iqMarkup(){
 
     <section class="panel" data-step="1"><p class="big">🤔 먼저 예상해 보기</p><p class="say">조사 전에 "이렇게 될 것 같다"를 정해요.</p>
       <div class="write"><div class="q">✏️ 우리 모둠/이름</div><input id="iq_team" placeholder="예: 2반 3모둠"></div>
-      <div class="write"><div class="q">✏️ 무슨 상품을 조사할까?</div><input id="iq_product" placeholder="예: 배추, 커피, 치킨"></div>
+      <div class="write"><div class="q">🛒 어떤 상품을 조사할까? (여러 개 가능)</div>
+        <div class="picks" id="iq_prodpicks"></div>
+        <div class="muted" style="font-size:13px;margin-top:6px">고른 상품에 맞는 실제 뉴스가 3단계에서 나와요!</div></div>
       <div class="tip">👇 파란 칸을 눌러 골라 보세요. 문장이 완성돼요.</div>
       <div class="hypo"><select class="blank" id="iq_hVar"><option>수요</option><option>공급</option></select> <span id="iq_par">가</span>
         <select class="blank" id="iq_hDir"><option>늘어나면</option><option>줄어들면</option></select><br>가격은
@@ -925,11 +936,11 @@ const IQ_TITLES=['탐구 시작','가설 세우기','요인 고르기','뉴스 �
 const IQ_TIPS={소비자:'💡 값이 오르면? 싼 대체재 찾기·절약·공동구매 / 내리면? 소비 늘리기',생산자:'💡 재료값 오르면? 생산량 조절·원가 절감 / 내리면? 생산 늘리기',정부:'💡 너무 오르면? 수입 확대·물가 단속 / 너무 내리면? 농가 지원·비축'};
 function iqInit(){
   const g=id=>document.getElementById(id);
-  g('iq_team').value=IQ.team; g('iq_product').value=IQ.product; g('iq_hVar').value=IQ.hVar; g('iq_hDir').value=IQ.hDir; g('iq_hPrice').value=IQ.hPrice; g('iq_hWhy').value=IQ.hWhy;
+  g('iq_team').value=IQ.team; g('iq_hVar').value=IQ.hVar; g('iq_hDir').value=IQ.hDir; g('iq_hPrice').value=IQ.hPrice; g('iq_hWhy').value=IQ.hWhy;
   g('iq_newsMemo').value=IQ.newsMemo; g('iq_predict').value=IQ.predict; g('iq_vMatch').value=IQ.vMatch; g('iq_vConcl').value=IQ.vConcl; g('iq_plan').value=IQ.plan[iqRole]||'';
   const bind=(id,f)=>g(id).addEventListener('input',e=>{f(e.target.value);iqSync();});
   const bindC=(id,f)=>g(id).addEventListener('change',e=>{f(e.target.value);iqSync();});
-  bind('iq_team',v=>IQ.team=v); bind('iq_product',v=>IQ.product=v); bind('iq_hWhy',v=>{IQ.hWhy=v;iqUpdHypo();});
+  bind('iq_team',v=>IQ.team=v); bind('iq_hWhy',v=>{IQ.hWhy=v;iqUpdHypo();});
   bindC('iq_hVar',v=>{IQ.hVar=v;iqUpdHypo();}); bindC('iq_hDir',v=>{IQ.hDir=v;iqUpdHypo();}); bindC('iq_hPrice',v=>{IQ.hPrice=v;iqUpdHypo();});
   bind('iq_newsMemo',v=>IQ.newsMemo=v); bind('iq_predict',v=>IQ.predict=v); bind('iq_vConcl',v=>IQ.vConcl=v);
   bindC('iq_vMatch',v=>{IQ.vMatch=v;iqUpdV();});
@@ -941,7 +952,7 @@ function iqInit(){
   iqBindSeg('iq_segD',v=>IQ.dV=v); iqBindSeg('iq_segS',v=>IQ.sV=v);
   g('iq_segD').querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.v===IQ.dV));
   g('iq_segS').querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.v===IQ.sV));
-  iqRenderPicks(); iqRenderNews(); iqUpdHypo(); iqUpdateGraph(); iqUpdV();
+  iqRenderProducts(); iqRenderPicks(); iqRenderNews(); iqUpdHypo(); iqUpdateGraph(); iqUpdV();
   iqGo(IQ.done?6:0);
 }
 function iqGo(i){
@@ -958,10 +969,18 @@ function iqRenderPicks(){
     el.onclick=()=>{ iqSel.has(f.id)?iqSel.delete(f.id):iqSel.add(f.id); iqRenderPicks(); iqSync(); };
     (f.g==='d'?D:S).appendChild(el); });
 }
+function iqRenderProducts(){
+  const box=document.getElementById('iq_prodpicks'); if(!box) return; box.innerHTML='';
+  IQ_PRODUCTS.forEach(p=>{ const el=document.createElement('div'); el.className='pick'+(iqProd.has(p.name)?' on':'');
+    el.innerHTML=p.name;
+    el.onclick=()=>{ iqProd.has(p.name)?iqProd.delete(p.name):iqProd.add(p.name); IQ.product=[...iqProd].join(', '); iqRenderProducts(); iqRenderNews(); iqSync(); };
+    box.appendChild(el); });
+}
 function iqRenderNews(){
   const a=document.getElementById('iq_news'); if(!a) return;
-  if(iqSel.size===0){ a.innerHTML='<div class="none">먼저 2단계에서 조사할 것을 골라 주세요 🙂</div>'; return; }
-  a.innerHTML=IQ_FACTORS.filter(f=>iqSel.has(f.id)).map(f=>`<div class="news-box"><h4>📰 ${f.newsTitle}</h4><div class="summary">${f.newsSummary}</div></div>`).join('');
+  const picked=IQ_PRODUCTS.filter(p=>iqProd.has(p.name));
+  if(!picked.length){ a.innerHTML='<div class="none">먼저 1단계에서 조사할 <b>상품</b>을 골라 주세요 🙂</div>'; return; }
+  a.innerHTML=picked.map(p=>`<div class="news-box"><h4>📰 [${esc(p.name)}] ${p.title}</h4><div class="summary">${p.summary}</div></div>`).join('');
 }
 function iqUpdHypo(){
   const par=IQ.hVar==='수요'?'가':'이'; const p=document.getElementById('iq_par'); if(p)p.textContent=par;
